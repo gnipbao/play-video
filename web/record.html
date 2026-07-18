@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control — hyperframes 录制合成</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #eae4d3; overflow: hidden; }
+  #stage { position: relative; width: 720px; height: 960px; }
+  #stage canvas { display: block; }
+  /* 与 index.html 相同的占位结构,渲染模式下由 sketch.js 隐藏 */
+  #overlay, #controls { display: none; }
+</style>
+</head>
+<body>
+  <div id="stage" data-composition-id="control" data-start="0" data-duration="26"
+       data-track-index="0" data-width="720" data-height="960">
+    <div id="overlay"></div>
+    <div id="controls">
+      <button id="btn-replay"></button>
+      <button id="btn-sound"></button>
+      <button id="btn-voice"></button>
+    </div>
+  </div>
+  <script>window.__HF_RENDER = true;</script>
+  <script src="lib/p5.min.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/sketch.js"></script>
+  <script src="lib/gsap.min.js"></script>
+  <script>
+    // hyperframes 契约:注册一条 paused 的 GSAP 时间线,渲染器逐帧 seek,
+    // onUpdate 驱动 sketch 的确定性帧渲染(window.__hfSeek 在 setup 后可用)
+    (function () {
+      const DUR = 26;
+      const playhead = { seconds: 0 };
+      const timeline = gsap.timeline({ paused: true });
+      timeline.to(playhead, {
+        seconds: DUR, duration: DUR, ease: "none",
+        onUpdate: function () {
+          if (window.__hfSeek) window.__hfSeek(playhead.seconds);
+        },
+      });
+      window.__timelines = window.__timelines || {};
+      window.__timelines["control"] = timeline;
+    })();
+  </script>
+</body>
+</html>

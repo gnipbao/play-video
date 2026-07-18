@@ -1,0 +1,26 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:0}</style></head>
+<body>
+<script src="../lib/p5.min.js"></script>
+<script>
+let paper, img;
+function preload(){ img = loadImage("../assets/hand.png"); }
+function setup(){
+  createCanvas(720, 960);
+  pixelDensity(2);
+  paper = createGraphics(720, 960);
+  paper.background(234,228,211);
+  const ctx = paper.drawingContext;
+  const g = ctx.createRadialGradient(360,480,300,360,480,750);
+  g.addColorStop(0,"rgba(0,0,0,0)"); g.addColorStop(1,"rgba(60,50,35,0.10)");
+  ctx.fillStyle = g; ctx.fillRect(0,0,720,960);
+  noLoop(); redraw();
+}
+function draw(){
+  image(paper, 0, 0);
+  stroke("#1a1712"); strokeWeight(3); line(100, 100, 600, 100);
+  noStroke(); fill(200, 30, 30); rect(100, 200, 200, 80);
+  fill("#1a1712"); textFont("Courier New"); textStyle(BOLD); textSize(46); text("Control", 100, 400);
+  image(img, 300, 500, 186, 288);
+}
+</script>
+</body></html>

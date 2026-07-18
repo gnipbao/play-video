@@ -1,0 +1,21 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body>
+<script src="../js/audio.js"></script>
+<script>
+try {
+  const a = new ScoreAudio();
+  a.init();
+  const events = [{t:1.8, step:0},{t:2.1, step:3},{t:2.4, step:-2}];
+  a.schedule(a.ctx.currentTime + 0.05, events);
+  setTimeout(() => {
+    console.log("AUDIO OK state=", a.ctx.state, "currentTime=", a.ctx.currentTime.toFixed(2), "nodes=", a._nodes.length);
+  }, 800);
+} catch (e) {
+  console.log("AUDIO FAIL", e.message);
+}
+const n = new Narration();
+n.setEnabled(true);
+n.speak([{t:0.1, text:"测试"}]);
+setTimeout(()=>console.log("NARRATION OK pending=", speechSynthesis.pending || speechSynthesis.speaking), 300);
+</script>
+</body></html>
