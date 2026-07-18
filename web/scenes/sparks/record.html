@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control — hyperframes 录制合成</title>
+<title>场景模板 — hyperframes 录制合成</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { background: #eae4d3; overflow: hidden; }
+  /* TODO: 宽高与场景 width/height 一致 */
   #stage { position: relative; width: 720px; height: 960px; }
   #stage canvas { display: block; }
-  /* 与 index.html 相同的占位结构,渲染模式下由引擎隐藏 */
   #overlay, #controls { display: none; }
 </style>
 </head>
 <body>
-  <div id="stage" data-composition-id="control" data-start="0" data-duration="26"
+  <div id="stage" data-composition-id="sparks" data-start="0" data-duration="10"
        data-track-index="0" data-width="720" data-height="960">
     <div id="overlay"></div>
     <div id="controls">
@@ -24,16 +24,16 @@
     </div>
   </div>
   <script>window.__HF_RENDER = true;</script>
-  <script src="lib/p5.min.js"></script>
-  <script src="engine/core.js"></script>
-  <script src="engine/input.js"></script>
-  <script src="engine/recipes.js"></script>
-  <script src="engine/audio-bus.js"></script>
-  <script src="scenes/control/scene.js"></script>
-  <script src="lib/gsap.min.js"></script>
+  <!-- 注意:hyperframes 会把入口 HTML 扁平化为 /record.html,场景脚本必须用根绝对路径 -->
+  <script src="/lib/p5.min.js"></script>
+  <script src="/engine/core.js"></script>
+  <script src="/engine/input.js"></script>
+  <script src="/engine/recipes.js"></script>
+  <script src="/engine/audio-bus.js"></script>
+  <script src="/scenes/sparks/scene.js"></script>
+  <script src="/lib/gsap.min.js"></script>
   <script>
-    // hyperframes 契约:注册一条 paused GSAP 时间线,渲染器逐帧 seek,
-    // onUpdate 驱动引擎的确定性帧渲染(window.__hfSeek 在 setup 后可用)
+    // hyperframes 契约:注册一条 paused GSAP 时间线,渲染器逐帧 seek
     Engine.registerTimeline();
   </script>
 </body>

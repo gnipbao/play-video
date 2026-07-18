@@ -1,19 +1,26 @@
 <!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body>
-<script src="../js/audio.js"></script>
+<script src="../engine/core.js"></script>
+<script src="../engine/recipes.js"></script>
+<script src="../engine/audio-bus.js"></script>
 <script>
+// 引擎音频冒烟测试:合成原语 + 事件总线 + 旁白
 try {
-  const a = new ScoreAudio();
-  a.init();
-  const events = [{t:1.8, step:0},{t:2.1, step:3},{t:2.4, step:-2}];
-  a.schedule(a.ctx.currentTime + 0.05, events);
+  const bus = new Engine.AudioBus({});
+  bus.init();
+  bus.setEnabled(true);
+  bus.emit("takeoff", { freq: 440 });
+  bus.emit("land", { freq: 523.25 });
+  bus.schedule([{ t: 0.1, type: "pluck", freq: 440, gain: 0.1, decay: 1.1 }]);
   setTimeout(() => {
-    console.log("AUDIO OK state=", a.ctx.state, "currentTime=", a.ctx.currentTime.toFixed(2), "nodes=", a._nodes.length);
+    console.log("AUDIO OK state=", bus.live.ctx.state,
+      "currentTime=", bus.live.ctx.currentTime.toFixed(2),
+      "nodes=", bus.live._nodes.length);
   }, 800);
 } catch (e) {
   console.log("AUDIO FAIL", e.message);
 }
-const n = new Narration();
+const n = new Engine.Narration();
 n.setEnabled(true);
 n.speak([{t:0.1, text:"测试"}]);
 setTimeout(()=>console.log("NARRATION OK pending=", speechSynthesis.pending || speechSynthesis.speaking), 300);

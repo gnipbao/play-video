@@ -1,13 +1,19 @@
 /* ============================================================
- * audio.js — Web Audio 合成的配乐与音效(交互版)
- *   - 入场:按曲谱音级依次"拨弦"奏出旋律
- *   - 事件音效:惊飞(下滑拨弦+风声)/ 归位(轻拨)/ 划谱拨弦
- *   - 鼠标扰动时的噪声微光(shimmer)
- *   - 无持续背景 pad(避免嗡嗡底噪),安静时只有动作触发的声音
+ * engine/recipes.js — Web Audio 现场合成原语 + 音效配方注册表
+ *
+ * LiveAudio:纯 Web Audio 合成(无任何素材文件)
+ *   pluck   三角波拨弦,快攻慢衰 + 起音噪声(gliss=true 音高急降)
+ *   whoosh  白噪声 + 带通扫频(风声)
+ *   shimmer 持续噪声微光,增益随扰动起伏
+ *
+ * Engine.recipes:事件 type → 现场播法。离线合成(tools/synth.py)
+ * 用同名同参配方——新增音效必须两处对齐(见 ENGINE.md)。
+ *   schedule:开场旋律等定点播放;playNow:交互触发的即时播放
+ *   minInterval:同类事件最小间隔(限流,防密集触发)
  * ============================================================ */
 "use strict";
 
-class ScoreAudio {
+Engine.LiveAudio = class {
   constructor() {
     this.ctx = null;
     this.master = null;
@@ -48,7 +54,7 @@ class ScoreAudio {
     return buf;
   }
 
-  /* 噪声微光:鼠标扰动时的"空气感" */
+  /* 噪声微光:扰动时的"空气感" */
   _shimmer() {
     const ctx = this.ctx;
     const src = ctx.createBufferSource();
@@ -67,7 +73,7 @@ class ScoreAudio {
     if (this.shimmerGain) this.shimmerGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.12);
   }
 
-  /* 拨弦:三角波快攻慢衰 + 起音噪声;gliss=true 时音高急速下滑(惊飞感) */
+  /* 拨弦:三角波快攻慢衰 + 起音噪声;gliss=true 时音高急速下滑 */
   pluck(t, freq, gain = 0.12, decay = 0.9, gliss = false) {
     if (!this.ctx) return;
     const ctx = this.ctx;
@@ -95,11 +101,6 @@ class ScoreAudio {
     this._nodes.push(o, nb);
   }
 
-  pluckNow(freq, gain = 0.08, decay = 0.8, gliss = false) {
-    if (!this.ctx || !this.enabled) return;
-    this.pluck(this.ctx.currentTime, freq, gain, decay, gliss);
-  }
-
   /* 风声 whoosh:白噪声 + 带通扫频 */
   whoosh(t, dur = 0.8, gain = 0.045) {
     if (!this.ctx) return;
@@ -119,44 +120,36 @@ class ScoreAudio {
     src.start(t);
     this._nodes.push(src);
   }
+};
 
-  whooshNow(gain = 0.04) {
-    if (!this.ctx || !this.enabled) return;
-    this.whoosh(this.ctx.currentTime, 0.7 + Math.random() * 0.3, gain);
-  }
-
-  /* 入场配乐:按曲谱音高依次拨弦(t0 = ctx 起点时刻,events=[{t,semi}]) */
-  scheduleIntro(t0, events) {
-    for (const ev of events) {
-      this.pluck(t0 + ev.t, 440 * Math.pow(2, ev.semi / 12), 0.10, 1.1);
-    }
-    // 入场完成后一个轻柔的收尾泛音
-    const last = events.length ? events[events.length - 1].t : 4;
-    this.pluck(t0 + last + 0.9, 880, 0.05, 2.4);
-  }
-}
-
-/* ---------------- 可选:中文旁白(Web Speech) ---------------- */
-class Narration {
-  constructor() { this.enabled = false; this._timers = []; }
-  setEnabled(on) {
-    this.enabled = on;
-    if (!on) { this._clear(); speechSynthesis.cancel(); }
-  }
-  _clear() { this._timers.forEach(clearTimeout); this._timers = []; }
-  speak(lines) {
-    this._clear();
-    if (!this.enabled || !("speechSynthesis" in window)) return;
-    speechSynthesis.cancel();
-    for (const { t, text } of lines) {
-      this._timers.push(setTimeout(() => {
-        if (!this.enabled) return;
-        const u = new SpeechSynthesisUtterance(text);
-        u.lang = "zh-CN";
-        u.rate = 0.92; u.pitch = 0.9; u.volume = 0.85;
-        speechSynthesis.speak(u);
-      }, t * 1000));
-    }
-  }
-  stop() { this._clear(); if ("speechSynthesis" in window) speechSynthesis.cancel(); }
-}
+/* ---------------- 音效配方(与 tools/synth.py 同名对齐) ---------------- */
+Engine.recipes = {
+  pluck: {
+    schedule(a, when, ev) {
+      a.pluck(when, ev.freq,
+        ev.gain === undefined ? 0.10 : ev.gain,
+        ev.decay === undefined ? 1.1 : ev.decay);
+    },
+    playNow(a, ev) {
+      a.pluck(a.ctx.currentTime, ev.freq,
+        ev.gain === undefined ? 0.08 : ev.gain,
+        ev.decay === undefined ? 0.8 : ev.decay);
+    },
+  },
+  takeoff: {
+    minInterval: 0.06,   // 限流:群体惊飞时不至于糊成一片
+    playNow(a, ev) {
+      a.pluck(a.ctx.currentTime, ev.freq, 0.07, 0.5, true);   // 下滑音
+      a.whoosh(a.ctx.currentTime, 0.7 + Math.random() * 0.3, 0.035 + Math.random() * 0.02);
+    },
+  },
+  land: {
+    playNow(a, ev) { a.pluck(a.ctx.currentTime, ev.freq, 0.05, 1.0); },
+  },
+  strum: {
+    playNow(a, ev) {
+      a.pluck(a.ctx.currentTime, ev.freq,
+        ev.gain === undefined ? 0.03 : ev.gain, 1.3);
+    },
+  },
+};

@@ -51,25 +51,19 @@ python3 -m http.server 8123
 
 ## 录制
 
-### 方式一:hyperframes 离线渲染(推荐,可复现)
-
-`record.html` 是为 hyperframes 准备的合成页:与主页面同一套 sketch,
-但走确定性 seek 驱动(`window.__HF_RENDER` + 注册 paused GSAP 时间线到 `window.__timelines`)。
+### 方式一:一条命令(hyperframes 离线渲染,可复现)
 
 ```bash
-# 1. 渲染无声视频(26s,720×960@30)
-hyperframes render web -c record.html -o demo/control_silent.mp4 -f 30 -q high
-
-# 2. 导出音轨事件(确定性快进模拟,控制台打 JSON)
-#    用 headless Chrome 打开 http://localhost:8123/record.html?dump=1 抓取 __AUDIO__ 行
-
-# 3. 离线合成配乐(与 audio.js 同一套配方)
-python3 .analysis/synth.py        # .analysis/audio_events.json → .analysis/soundtrack.wav
-
-# 4. 混音成片
-ffmpeg -i demo/control_silent.mp4 -i .analysis/soundtrack.wav \
-  -c:v copy -c:a aac -b:a 192k demo/control.mp4
+tools/make_film.sh record.html demo/control.mp4
 ```
+
+脚本自动完成四步(细节见 ENGINE.md):
+
+1. **渲染无声视频**:`record.html` 是 hyperframes 合成页,与主页面同一套场景,
+   走确定性 seek 驱动(引擎 `window.__hfSeek` + paused GSAP 时间线)
+2. **导出音轨事件**:headless Chrome 打开 `record.html?dump=1`,快进全片抓取 `__AUDIO__`
+3. **离线合成配乐**:`tools/synth.py`(与 `engine/recipes.js` 同一套配方)
+4. **混音成片**:ffmpeg 合成 `demo/control.mp4`
 
 渲染模式下音轨事件(入场拨弦/惊飞/归位/划谱)与现场播放同一套触发逻辑,
 同一固定种子 → 音画严格同步、每次渲染完全一致。
@@ -82,7 +76,9 @@ ffmpeg -i demo/control_silent.mp4 -i .analysis/soundtrack.wav \
 
 ## 素材与实现要点
 
+- 代码结构:`engine/`(渲染契约/输入/音轨总线,通用)+ `scenes/control/scene.js`(本场景逻辑);
+  引擎接口见根目录 ENGINE.md,新场景从 `templates/scene/` 复制起步
 - `assets/hand.png` — 从原片帧提取的提线手剪影
 - `assets/birds.json` — 从原片帧提取并矢量化的 5 种燕子(轮廓 + RDP 简化),缩放不模糊
 - `lib/p5.min.js` — p5.js 1.11.13(与心法视频同版本),本地化离线可用
-- 自定义函数避开 p5 保留名(`smooth`/`lerp`/`scale` 等),p5 全局模式初始化会覆盖同名函数
+- 场景代码包在 IIFE 里,自定义函数避开 p5 保留名(`smooth`/`lerp`/`scale` 等)
