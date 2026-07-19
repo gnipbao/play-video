@@ -15,12 +15,23 @@ web/scenes/<名>/ 场景(每只视频一个)
   scene.js       场景全部逻辑
   index.html     交互页(点击开播,鼠标可玩)
   record.html    渲染页(hyperframes 用)
+web/gallery/     画廊(works.js 作品登记处)
+web/films/       压缩成片(画廊用 720p 版)
 tools/
   make_film.sh   一条命令出片
+  serve.py       本地开发服务器(禁缓存)
   dump_events.sh 导出音轨事件(headless Chrome)
   synth.py       事件 JSON → WAV 离线合成
 templates/scene/ 新场景骨架(复制它起步)
 ```
+
+## 上架新作品到画廊
+
+1. 场景做好、出片(`tools/make_film.sh ... demo/<名>.mp4`)
+2. 成片转压一份 720p 到画廊目录:
+   `ffmpeg -i demo/<名>.mp4 -vf scale=720:960 -c:v libx264 -crf 27 -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart web/films/<名>.mp4`
+3. `web/gallery/works.js` 加一条(id/title/subtitle/desc/film/play/duration/year),
+   数组顺序即展出顺序;画廊首页自动渲染,不用改别的
 
 ## 快速开始
 
@@ -72,7 +83,9 @@ Engine.start({
 确认事件类型/数量符合预期。
 
 现有配方:`pluck`(拨弦,支持 schedule 定点播放)、`takeoff`(下滑音+风声,
-自带 0.06s 限流)、`land`(轻柔归位)、`strum`(划奏,ev 带 gain)。
+自带 0.06s 限流)、`land`(轻柔归位)、`strum`(划奏,ev 带 gain)、
+`type`(打字机击键:金属 tick + 腔体 clack + 低频 thump,ev 带 gain/pitch,
+自带 0.03s 限流)、`carriage`(打字机回车:擦键 zip + 铃 ding)。
 
 ## 种子纪律(可复现的关键)
 

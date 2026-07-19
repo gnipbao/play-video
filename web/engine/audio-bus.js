@@ -34,6 +34,12 @@ Engine.AudioBus = class {
 
   setShimmer(v) { this.live.setShimmer(v); }
 
+  /* 重播:清限流记录,停掉上一轮调度出去的音符(intro 等) */
+  onReplay() {
+    this._last = {};
+    this.live.stopAll();
+  }
+
   emit(type, ev) {
     const r = this.recipes[type];
     const now = Engine.now();

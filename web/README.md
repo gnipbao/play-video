@@ -6,9 +6,9 @@
 ## 运行
 
 ```bash
-cd web
-python3 -m http.server 8123
-# 打开 http://localhost:8123
+tools/serve.py 8123
+# 打开 http://localhost:8123/scenes/control/
+# (根路径 / 是作品集画廊,本页是 control 的交互版)
 ```
 
 ## 玩法 / 交互

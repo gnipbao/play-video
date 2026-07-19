@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>replay 回归测试</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: #211f1c; overflow: hidden; }
+  #stage { position: relative; width: 720px; height: 960px; }
+  #stage canvas { display: block; }
+  #overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; cursor: pointer; z-index: 10;
+  }
+  #overlay.hidden { opacity: 0; pointer-events: none; }
+  #overlay .tip, #overlay .sub { font-size: 13px; color: #17140f; }
+  #controls { position: absolute; top: 10px; right: 12px; z-index: 20; }
+</style>
+</head>
+<body>
+  <!-- 自动点开播 → 4.6s 点重播,截图应为重播后 ~3.4s 的正常画面(键盘完好) -->
+  <div id="stage">
+    <div id="overlay">
+      <div class="tip">点击开始播放</div>
+      <div class="sub">replay test</div>
+    </div>
+    <div id="controls">
+      <button id="btn-replay">↻ 重播</button>
+      <button id="btn-sound">音效 开</button>
+      <button id="btn-voice">旁白 关</button>
+    </div>
+  </div>
+  <script src="../lib/p5.min.js"></script>
+  <script src="../engine/core.js"></script>
+  <script src="../engine/input.js"></script>
+  <script src="../engine/recipes.js"></script>
+  <script src="../engine/audio-bus.js"></script>
+  <script src="../scenes/typewriter/scene.js"></script>
+  <script>
+    // ?start=0.6&replay=4.6 自动点开播与重播(秒)
+    const Q = new URLSearchParams(location.search);
+    const at = (k, d) => parseFloat(Q.get(k) || d) * 1000;
+    setTimeout(() => document.getElementById("overlay").click(), at("start", 0.6));
+    setTimeout(() => document.getElementById("btn-replay").click(), at("replay", 4.6));
+  </script>
+</body>
+</html>

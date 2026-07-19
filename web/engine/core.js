@@ -126,6 +126,8 @@ window.Engine = (function () {
       overlay.classList.add("hidden");
       E.audio.init();
       E.audio.setEnabled(E.audio.enabled);
+      simNow = 0;              // 重播:模拟时钟归零,否则首帧 dt 为负(场景状态被倒积分)
+      E.audio.onReplay();      // 重播:清限流记录 + 停掉上一轮未播完的调度音符
       startMs = millis();
       E.started = true;
       if (E.audio.enabled && E.cfg.audio && E.cfg.audio.intro) {

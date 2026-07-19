@@ -603,8 +603,8 @@
     width: W, height: H, duration: 26,
     waypoints: WAYPOINTS,
     preload() {
-      imgHand = loadImage("assets/hand.png");
-      birdVec = loadJSON("assets/birds.json");
+      imgHand = loadImage("/assets/hand.png");
+      birdVec = loadJSON("/assets/birds.json");
     },
     build() {
       textFont("Courier New");

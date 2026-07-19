@@ -1,0 +1,140 @@
+/* ============================================================
+ * gallery/gallery.css — 作品集画廊样式
+ * 语言与作品一致:米色纸面 + 颗粒、打字机字体、墨色 + 朱红
+ * ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --paper: #eae4d3;
+  --ink: #1a1712;
+  --ink-soft: rgba(26, 23, 18, .62);
+  --ink-faint: rgba(26, 23, 18, .38);
+  --red: #b03427;
+  --line: rgba(26, 23, 18, .18);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Courier New", Courier, monospace;
+  /* 纸纹颗粒(SVG 湍流,无额外请求) */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23g)'/%3E%3C/svg%3E");
+  min-height: 100vh;
+}
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+/* ---------------- 页头 ---------------- */
+header { padding: 72px 0 40px; border-bottom: 1px solid var(--line); }
+
+.mark {
+  width: 14px; height: 14px; background: var(--red); border-radius: 2px;
+  transform: rotate(8deg); margin-bottom: 22px;
+}
+
+h1 {
+  font-size: clamp(30px, 5vw, 46px);
+  font-weight: 700; letter-spacing: 2px; line-height: 1.15;
+}
+h1 .en { color: var(--red); }
+
+.tagline {
+  margin-top: 14px; font-size: 13px; letter-spacing: 1px;
+  color: var(--ink-soft); max-width: 560px; line-height: 1.9;
+}
+
+.sign { margin-top: 18px; font-size: 13px; font-weight: 700; color: var(--red); letter-spacing: 1px; }
+
+/* ---------------- 作品网格 ---------------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 34px;
+  padding: 44px 0 24px;
+}
+
+.card { display: flex; flex-direction: column; }
+
+.card .frame {
+  position: relative; display: block; overflow: hidden;
+  border: 1px solid var(--line);
+  background: #dfd8c4;
+  box-shadow: 0 6px 24px rgba(26, 23, 18, .12);
+  transition: transform .35s ease, box-shadow .35s ease;
+  cursor: pointer;
+}
+.card .frame:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 42px rgba(26, 23, 18, .2);
+}
+.card .frame video {
+  display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+  transition: transform .5s ease;
+}
+.card .frame:hover video { transform: scale(1.025); }
+
+/* 播放角标 */
+.card .frame::after {
+  content: "有声正片 ▶";
+  position: absolute; right: 10px; bottom: 10px;
+  font-size: 10px; letter-spacing: 1px;
+  color: #eae4d3; background: rgba(23, 20, 15, .62);
+  padding: 4px 8px; border-radius: 3px;
+  opacity: 0; transition: opacity .3s;
+}
+.card .frame:hover::after { opacity: 1; }
+
+.card h2 { margin-top: 16px; font-size: 17px; letter-spacing: 1px; }
+.card h2 .sub { font-size: 12px; color: var(--ink-soft); font-weight: 400; margin-left: 8px; }
+.card .desc { margin-top: 8px; font-size: 12px; line-height: 1.9; color: var(--ink-soft); }
+.card .meta {
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line);
+  display: flex; align-items: center; gap: 14px;
+  font-size: 11px; letter-spacing: 1px; color: var(--ink-faint);
+}
+.card .meta .go {
+  margin-left: auto; color: var(--red); text-decoration: none;
+  border: 1px solid rgba(176, 52, 39, .45); border-radius: 3px;
+  padding: 4px 10px; font-weight: 700; transition: background .25s, color .25s;
+  white-space: nowrap;
+}
+.card .meta .go:hover { background: var(--red); color: var(--paper); }
+
+/* ---------------- 页脚 ---------------- */
+footer {
+  margin-top: 40px; padding: 26px 0 46px;
+  border-top: 1px solid var(--line);
+  font-size: 11px; letter-spacing: 1px; color: var(--ink-faint);
+  display: flex; flex-wrap: wrap; gap: 8px 24px;
+}
+footer .red { color: var(--red); font-weight: 700; }
+
+/* ---------------- 灯箱(有声正片) ---------------- */
+#lightbox {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(23, 20, 15, .88);
+  display: none; align-items: center; justify-content: center;
+}
+#lightbox.on { display: flex; }
+#lightbox video {
+  max-width: min(92vw, 640px); max-height: 88vh;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .6);
+}
+#lightbox .close {
+  position: absolute; top: 18px; right: 24px;
+  color: #eae4d3; font-size: 26px; cursor: pointer; user-select: none;
+  font-family: inherit; background: none; border: none;
+}
+#lightbox .cap {
+  position: absolute; bottom: 22px; left: 0; right: 0;
+  text-align: center; color: rgba(234, 228, 211, .65);
+  font-size: 12px; letter-spacing: 2px;
+}
+
+/* ---------------- 窄屏 ---------------- */
+@media (max-width: 640px) {
+  header { padding: 48px 0 30px; }
+  .grid { gap: 26px; padding-top: 32px; }
+}

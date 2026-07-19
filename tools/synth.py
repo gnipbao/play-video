@@ -11,6 +11,8 @@
   takeoff — 下滑音拨弦 + 风声 whoosh(惊飞)
   land    — 轻柔拨弦(归位)
   strum   — 划谱拨弦(五声音阶)
+  type    — 打字机击键:金属 tick + 腔体 clack + 低频 thump(pitch 微抖)
+  carriage — 打字机回车:擦键 zip + 铃 ding
 """
 import json
 import math
@@ -98,6 +100,79 @@ def add_whoosh(t0, dur_s, gain):
     mix[i0:i0 + n] += out * env * gain * 3.0  # 带通有衰减,补回响度
 
 
+def _bandpass(sig, fc, q):
+    """二阶带通 biquad(RBJ cookbook),与 Web Audio BiquadFilter 同构。"""
+    w0 = 2 * math.pi * fc / SR
+    alpha = math.sin(w0) / (2 * q)
+    b0, b2 = alpha, -alpha
+    a0, a1, a2 = 1 + alpha, -2 * math.cos(w0), 1 - alpha
+    out = np.zeros(len(sig))
+    x1 = x2 = y1 = y2 = 0.0
+    for i in range(len(sig)):
+        x = sig[i]
+        y = (b0 * x + b2 * x2 - a1 * y1 - a2 * y2) / a0
+        x2, x1 = x1, x
+        y2, y1 = y1, y
+        out[i] = y
+    return out
+
+
+def add_type(t0, gain, pitch=1.0):
+    """对应 LiveAudio.type():金属 tick(4200Hz)+ 腔体 clack(1600Hz)+ thump(170→85Hz)。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    # tick:25ms 高频噪声
+    n = min(int(0.025 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 11)
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / (gain * 0.9)) * t / 0.025)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 4200 * pitch, 0.9) * env * gain * 0.9 * 3.0
+    # clack:70ms 中频腔体
+    n = min(int(0.07 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 23)
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / (gain * 0.8)) * t / 0.07)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 1600 * pitch, 1.6) * env * gain * 0.8 * 3.0
+    # thump:正弦 170→85Hz(50ms 滑音),60ms 指数衰减
+    n = min(int(0.06 * SR), N - i0)
+    if n > 0:
+        t = np.arange(n) / SR
+        k = -math.log(0.5) / 0.05
+        phase = 2 * math.pi * 170 * pitch * (1 - np.exp(-k * t)) / k
+        env = np.exp(np.log(0.0004 / (gain * 0.5)) * t / 0.06)
+        mix[i0:i0 + n] += np.sin(phase) * env * gain * 0.5
+
+
+def add_carriage(t0, gain):
+    """对应 LiveAudio.carriage():擦键 zip(0.18s 上扫)+ 铃 ding(C7 2093Hz + 2.76 倍非谐泛音)。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    # zip:噪声过带通(简化:固定 1800Hz 近似 900→3200 扫频)
+    n = min(int(0.18 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 977) + 5)
+        t = np.arange(n) / SR
+        env = np.minimum(t / 0.05, 1.0) * np.clip((0.18 - t) / 0.13, 0, 1)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 1800, 2.2) * env * gain * 0.8 * 3.0
+    # ding:三角波 C7 长衰 + 非谐泛音短衰(延迟 0.14s 起)
+    i1 = i0 + int(0.14 * SR)
+    n = min(int(1.3 * SR), N - i1)
+    if n > 0:
+        t = np.arange(n) / SR
+        sig = (2 / math.pi) * np.arcsin(np.sin(2 * math.pi * 2093 * t))
+        env = np.exp(np.log(0.0004 / gain) * t / 1.2)
+        mix[i1:i1 + n] += sig * env * gain
+    n = min(int(0.6 * SR), N - i1)
+    if n > 0:
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / (gain * 0.35)) * t / 0.5)
+        mix[i1:i1 + n] += np.sin(2 * math.pi * 2093 * 2.76 * t) * env * gain * 0.35
+
+
 rng = np.random.default_rng(555)
 for e in events:
     ty = e["type"]
@@ -107,6 +182,10 @@ for e in events:
         add_pluck(e["t"], e["freq"], 0.05, 1.0)
     elif ty == "strum":
         add_pluck(e["t"], e["freq"], e.get("gain", 0.03), 1.3)
+    elif ty == "type":
+        add_type(e["t"], e.get("gain", 0.09), e.get("pitch", 1.0))
+    elif ty == "carriage":
+        add_carriage(e["t"], e.get("gain", 0.06))
     elif ty == "takeoff":
         add_pluck(e["t"], e["freq"], 0.07, 0.5, gliss=True)
         add_whoosh(e["t"], 0.7 + rng.uniform(0, 0.3), 0.040)

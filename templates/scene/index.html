@@ -44,6 +44,16 @@
   }
   #controls button:hover { background: #eae4d3; }
   #controls button.on { background: #17140f; color: #eae4d3; }
+  /* 返回画廊 */
+  #back {
+    position: absolute; top: 10px; left: 12px; z-index: 20;
+    font-size: 11px; letter-spacing: 1px; text-decoration: none;
+    background: rgba(234,228,211,.85); color: #17140f;
+    border: 1px solid rgba(23,20,15,.5); border-radius: 3px;
+    padding: 4px 9px; opacity: 0; transition: opacity .3s;
+  }
+  #stage:hover #back { opacity: 1; }
+  #back:hover { background: #eae4d3; }
 </style>
 </head>
 <body>
@@ -53,6 +63,7 @@
       <div class="tip">点击开始播放</div>
       <div class="sub">场景副标题 · @署名</div>
     </div>
+    <a id="back" href="/">← 画廊</a>
     <div id="controls">
       <button id="btn-replay" title="重新播放">↻ 重播</button>
       <button id="btn-sound" class="on" title="配乐/音效">音效 开</button>

@@ -3,75 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control — perform your life</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    height: 100%;
-    background: #211f1c;
-    font-family: "Courier New", Courier, monospace;
-    overflow: hidden;
-  }
-  body { display: flex; align-items: center; justify-content: center; }
-  #stage {
-    position: relative;
-    /* JS 会按窗口比例设置具体宽高,保持 3:4 */
-    box-shadow: 0 12px 60px rgba(0,0,0,.55);
-  }
-  #stage canvas { display: block; }
-
-  /* 开始遮罩:浏览器要求用户手势后才能出声 */
-  #overlay {
-    position: absolute; inset: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(234,228,211,.92);
-    cursor: pointer; user-select: none;
-    transition: opacity .4s;
-    z-index: 10;
-  }
-  #overlay.hidden { opacity: 0; pointer-events: none; }
-  #overlay .play {
-    width: 84px; height: 84px; border: 2px solid #17140f; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 30px; color: #17140f; padding-left: 8px;
-  }
-  #overlay .tip { margin-top: 18px; font-size: 13px; letter-spacing: 2px; color: #17140f; }
-  #overlay .sub { margin-top: 6px; font-size: 11px; letter-spacing: 1px; color: #8a8375; }
-
-  /* 控制条 */
-  #controls {
-    position: absolute; top: 10px; right: 12px; z-index: 20;
-    display: flex; gap: 8px; opacity: 0; transition: opacity .3s;
-  }
-  #stage:hover #controls { opacity: 1; }
-  #controls button {
-    font-family: inherit; font-size: 11px; letter-spacing: 1px;
-    background: rgba(234,228,211,.85); color: #17140f;
-    border: 1px solid rgba(23,20,15,.5); border-radius: 3px;
-    padding: 4px 9px; cursor: pointer;
-  }
-  #controls button:hover { background: #eae4d3; }
-  #controls button.on { background: #17140f; color: #eae4d3; }
-</style>
+<title>PLAY VIDEO — CeekcatX 交互动画集</title>
+<meta name="description" content="程序化交互动画作品集:p5.js 交互动画 → 确定性渲染 → 音画同源配乐。每件作品都可以点进去亲手玩。">
+<link rel="stylesheet" href="gallery/gallery.css">
 </head>
 <body>
-  <div id="stage">
-    <div id="overlay">
-      <div class="play">▶</div>
-      <div class="tip">点击开始播放</div>
-      <div class="sub">Control — perform your life · @GeekCatX</div>
-    </div>
-    <div id="controls">
-      <button id="btn-replay" title="重新播放">↻ 重播</button>
-      <button id="btn-sound" class="on" title="配乐/音效">音效 开</button>
-      <button id="btn-voice" title="中文旁白(语音合成)">旁白 关</button>
-    </div>
+  <div class="wrap">
+    <header>
+      <div class="mark"></div>
+      <h1><span class="en">PLAY VIDEO</span><br>交互动画集</h1>
+      <p class="tagline">
+        把交互写进画面:p5.js 程序化动画 → hyperframes 确定性渲染 →
+        音画同源配乐 → ffmpeg 出片。这里每件作品都有两种看法——
+        看正片,或者点进去亲手玩。
+      </p>
+      <div class="sign">@CeekcatX</div>
+    </header>
+
+    <main id="grid" class="grid"><!-- 卡片由 gallery.js 按 works.js 生成 --></main>
+
+    <footer>
+      <span>p5.js · hyperframes · Web Audio · ffmpeg</span>
+      <span>画面与声音同一套触发,逐帧可复现</span>
+      <span class="red">@CeekcatX</span>
+    </footer>
   </div>
-  <script src="lib/p5.min.js"></script>
-  <script src="engine/core.js"></script>
-  <script src="engine/input.js"></script>
-  <script src="engine/recipes.js"></script>
-  <script src="engine/audio-bus.js"></script>
-  <script src="scenes/control/scene.js"></script>
+
+  <!-- 有声正片灯箱 -->
+  <div id="lightbox">
+    <button class="close" id="lb-close" title="关闭 (Esc)">×</button>
+    <video id="lb-video" controls playsinline></video>
+    <div class="cap" id="lb-cap"></div>
+  </div>
+
+  <script src="gallery/works.js?v=3"></script>
+  <script src="gallery/gallery.js?v=3"></script>
 </body>
 </html>
