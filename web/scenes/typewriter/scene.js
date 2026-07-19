@@ -419,7 +419,7 @@
     textStyle(BOLD);
     textSize(16);
     fill(RED[0], RED[1], RED[2], 235 * ap);
-    text("@CeekcatX", W / 2, 922);
+    text("@GeekCatX", W / 2, 922);
     pop();
   }
 
