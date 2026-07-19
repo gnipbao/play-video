@@ -38,3 +38,7 @@ cp -r templates/scene web/scenes/<名>   # 然后改 scene.js,详见 ENGINE.md
 ## 部署
 
 静态站点,Vercel 导入本仓库即可:Root Directory 设 `web`,无构建步骤。
+推送到 `main` 自动触发 Production 部署,线上地址:
+<https://play-video-gnipxs-projects.vercel.app>
+(项目开了 Vercel 登录保护:想公开访问,到 Project Settings →
+Deployment Protection 把 Vercel Authentication 关掉或仅保留 Preview)
