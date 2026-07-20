@@ -5,6 +5,9 @@
  *   自动/渲染:waypoints [(t,x,y),...] 折线,段内 smoothstep 插值 + 噪声抖动
  *   手动:跟踪真实鼠标,静止 0.7s 后视为离开
  * 扰动强度 D:快起慢落的 0..1 包络,场景用它驱动一切"受惊"表现。
+ *
+ * 按压状态 pressed:waypoints 可带第 4 元素(0/1),表示该段按住拖动
+ * (渲染/自动模式可编排拖拽);手动模式取 mouseIsPressed。
  * ============================================================ */
 "use strict";
 
@@ -15,6 +18,7 @@ Engine.Input = class {
     this.release = (rates && rates.release) || 1.1;  // D 回落速率
     this.x = -999; this.y = -999;
     this.active = false;
+    this.pressed = false;
     this.speed = 0;
     this.D = 0;                 // 扰动强度 0..1
     this._lastMoveT = -99;
@@ -27,6 +31,7 @@ Engine.Input = class {
       const wp = this.wp;
       if (t < wp[0][0] || t > wp[wp.length - 1][0]) {
         this.active = false;
+        this.pressed = false;
         this.speed = 0;
       } else {
         this.active = true;
@@ -38,6 +43,7 @@ Engine.Input = class {
         const ny = Engine.u.mix(y0, y1, p) + (noise(950, t * 0.5) - 0.5) * 50;
         this.speed = Math.hypot(nx - this.x, ny - this.y) / Math.max(dt, 1e-3);
         this.x = nx; this.y = ny;
+        this.pressed = wp[i].length > 3 && wp[i][3] === 1;   // 段首标记:该段按住
       }
     } else {
       const W = Engine.cfg.width, H = Engine.cfg.height;
@@ -50,6 +56,7 @@ Engine.Input = class {
       }
       this.active = inside && (t - this._lastMoveT) < 0.7;
       if (!this.active) this.speed = 0;
+      this.pressed = inside && mouseIsPressed;
     }
 
     // 扰动强度:快起慢落

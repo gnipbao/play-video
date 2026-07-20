@@ -53,6 +53,7 @@ Engine.start({
   duration: 10,             // 片长(秒),record.html 的 data-duration 同步改
   pixelDensity: 2,          // 可选,默认 2
   waypoints: [[t, x, y], …],// 自动演示轨迹;渲染模式和 ?auto=1 都走它
+                           // 可带第 4 元素 0/1:该段按住拖动(input.pressed)
   input: { attack: 5.5, release: 1.1 },  // 可选,D 的起落速率
   preload() {},             // loadImage/loadJSON(p5 preload 桥接)
   build() {},               // 建场景(见"种子纪律")
@@ -85,7 +86,14 @@ Engine.start({
 现有配方:`pluck`(拨弦,支持 schedule 定点播放)、`takeoff`(下滑音+风声,
 自带 0.06s 限流)、`land`(轻柔归位)、`strum`(划奏,ev 带 gain)、
 `type`(打字机击键:金属 tick + 腔体 clack + 低频 thump,ev 带 gain/pitch,
-自带 0.03s 限流)、`carriage`(打字机回车:擦键 zip + 铃 ding)。
+自带 0.03s 限流)、`carriage`(打字机回车:擦键 zip + 铃 ding)、
+`knock`(木关节碰撞:短噪声过木质腔体带通 + 低频 thump,ev 带 gain/pitch,
+自带 0.05s 限流)、`brush`(运笔:带通噪声柔和下扫,支持 schedule,
+自带 0.04s 限流)、`flutter`(扑翼:三次短噪声脉冲,自带 0.09s 限流)、
+`blip`(水泡:正弦快速上滑,ev 带 freq/gain,自带 0.05s 限流)、
+`stream`(水流:持续噪声 + 增益起伏,ev 带 dur/gain,持续型只走 schedule 编排)、
+`chirp`(燕鸣:两短一长啁啾,ev 带 gain/pitch,自带 0.25s 限流)、
+`swish`(拨水:短噪声带通慢扫,ev 带 gain/pitch,自带 0.3s 限流)。
 
 ## 种子纪律(可复现的关键)
 
@@ -119,5 +127,7 @@ Engine.start({
 - **渲染模式判断要动态**:`window.__HF_RENDER === true || 页面有 [data-composition-id]`,
   渲染管线脚本执行顺序不可控,不能在脚本加载时只判一次
 - **p5 保留名**:自定义函数避开 `smooth`/`lerp`/`scale` 等,场景代码建议包在 IIFE 里
+- **p5 loadFont 只认 ttf/otf**:喂 woff2 会报 Unsupported OpenType signature wOF2
+  并卡在 Loading;子集化字体时让 pyftsubset 另出一份 ttf(不加 --flavor)
 - **Node 版本**:本机 Node 20 也能跑 hyperframes(npx 的 >=22 警告可无视,直接用项目二进制)
 - **git push 到 github.com**:直连不稳,走本地代理 `git -c http.proxy=http://127.0.0.1:7897 push`

@@ -13,6 +13,13 @@
   strum   — 划谱拨弦(五声音阶)
   type    — 打字机击键:金属 tick + 腔体 clack + 低频 thump(pitch 微抖)
   carriage — 打字机回车:擦键 zip + 铃 ding
+  knock   — 木关节碰撞:短噪声过木质腔体带通 + 低频 thump(pitch 微抖)
+  brush   — 运笔:带通噪声柔和下扫(书写)
+  flutter — 扑翼:一串短噪声脉冲(鸟群扇翅)
+  blip    — 水泡:正弦快速上滑(鱼/气泡)
+  stream  — 水流:持续噪声过低通 + 增益起伏(带 dur)
+  chirp   — 燕鸣:两短一长啁啾(高频正弦快上快下)
+  swish   — 拨水:短噪声带通慢扫(摆尾推进)
 """
 import json
 import math
@@ -28,7 +35,7 @@ events = json.load(open(sys.argv[1]))
 out_path = sys.argv[2]
 
 tail = 3.0
-dur = max(e["t"] for e in events) + tail
+dur = max(e["t"] + e.get("dur", 0) for e in events) + tail
 # 可选第三参数:成片时长上限(视频长度),音轨不超长,结尾 0.3s 淡出
 maxdur = float(sys.argv[3]) if len(sys.argv) > 3 else None
 if maxdur is not None and dur > maxdur:
@@ -146,6 +153,126 @@ def add_type(t0, gain, pitch=1.0):
         mix[i0:i0 + n] += np.sin(phase) * env * gain * 0.5
 
 
+def add_brush(t0, gain, pitch=1.0):
+    """对应 LiveAudio.brush():0.13s 噪声包络 + 带通(近似 2500→700 下扫,取中值 1300Hz)。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    n = min(int(0.13 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 41)
+        t = np.arange(n) / SR
+        env = np.minimum(t / 0.03, 1.0) * np.clip((0.13 - t) / 0.10, 0, 1)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 1300 * pitch, 1.1) * env * gain * 3.0
+
+
+def add_flutter(t0, gain, pitch=1.0):
+    """对应 LiveAudio.flutter():三次短噪声脉冲(间隔 0.1s,逐次减弱)。"""
+    i0 = int(t0 * SR)
+    for i in range(3):
+        t1 = t0 + i * 0.1
+        j0 = int(t1 * SR)
+        if j0 >= N:
+            continue
+        n = min(int(0.05 * SR), N - j0)
+        if n <= 0:
+            continue
+        rng = np.random.default_rng(int(t1 * 1000) + 53)
+        t = np.arange(n) / SR
+        env = np.minimum(t / 0.012, 1.0) * np.exp(np.log(0.0004 / gain) * t / 0.05)
+        mix[j0:j0 + n] += _bandpass(rng.uniform(-1, 1, n), (900 + i * 150) * pitch, 1.3) * env * gain * (1 - i * 0.22) * 3.0
+
+
+def add_blip(t0, freq, gain):
+    """对应 LiveAudio.blip():正弦 0.07s 上滑(freq→2.2×),90ms 衰减。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    n = min(int(0.09 * SR), N - i0)
+    if n > 0:
+        t = np.arange(n) / SR
+        k = -math.log(1 / 2.2) / 0.07
+        phase = 2 * math.pi * freq * (np.exp(k * t) - 1) / k
+        env = np.minimum(t / 0.012, 1.0) * np.exp(np.log(0.0004 / gain) * t / 0.09)
+        mix[i0:i0 + n] += np.sin(phase) * env * gain
+
+
+def add_stream(t0, dur_s, gain):
+    """对应 LiveAudio.stream():噪声过 ~300Hz 共振低通,0.6s 淡入、末尾淡出,
+    增益带缓慢"汩汩"起伏(2.3Hz + 5.1Hz 叠加)。"""
+    n = int(dur_s * SR)
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    n = min(n, N - i0)
+    if n <= 0:
+        return
+    t = np.arange(n) / SR
+    rng = np.random.default_rng(int(t0 * 977) + 17)
+    nz = rng.uniform(-1, 1, n)
+    # 一阶低通(≈ 420Hz)
+    a = 1 - math.exp(-2 * math.pi * 420 / SR)
+    out = np.empty(n)
+    y = 0.0
+    for i in range(n):
+        y += a * (nz[i] - y)
+        out[i] = y
+    wob = 0.82 + 0.18 * np.sin(2 * math.pi * 2.3 * t) + 0.09 * np.sin(2 * math.pi * 5.1 * t + 1.3)
+    env = np.minimum(t / 0.6, 1.0) * np.clip((dur_s - t) / 0.5, 0, 1)
+    mix[i0:i0 + n] += out * env * wob * gain * 2.2
+
+
+def add_chirp(t0, gain, pitch=1.0):
+    """对应 LiveAudio.chirp():两短(4300→5200/5000)一长(3400→2500)啁啾。"""
+    for dt0, f0, f1, d in [(0.0, 4300, 5200, 0.05), (0.09, 4300, 5000, 0.05), (0.20, 3400, 2500, 0.12)]:
+        i0 = int((t0 + dt0) * SR)
+        if i0 >= N:
+            continue
+        n = min(int((d + 0.03) * SR), N - i0)
+        if n <= 0:
+            continue
+        t = np.arange(n) / SR
+        k = math.log(f1 / f0) / d
+        phase = 2 * math.pi * f0 * pitch * (np.exp(k * t) - 1) / k
+        env = np.minimum(t / 0.012, 1.0) * np.exp(np.log(0.0004 / gain) * t / (d + 0.03))
+        mix[i0:i0 + n] += np.sin(phase) * env * gain
+
+
+def add_swish(t0, gain, pitch=1.0):
+    """对应 LiveAudio.swish():0.25s 噪声包络 + 带通(近似 460→980→520,取中值 700Hz)。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    n = min(int(0.25 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 67)
+        t = np.arange(n) / SR
+        env = np.minimum(t / 0.06, 1.0) * np.clip((0.25 - t) / 0.19, 0, 1)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 700 * pitch, 1.2) * env * gain * 3.0
+
+
+def add_knock(t0, gain, pitch=1.0):
+    """对应 LiveAudio.knock():腔体(45ms 噪声过 700Hz 带通)+ thump(150→70Hz 正弦)。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    # 腔体:45ms 带通噪声
+    n = min(int(0.045 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 31)
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / gain) * t / 0.045)
+        mix[i0:i0 + n] += _bandpass(rng.uniform(-1, 1, n), 700 * pitch, 2.6) * env * gain * 3.0
+    # thump:正弦 150→70Hz(50ms 滑音),70ms 指数衰减
+    n = min(int(0.07 * SR), N - i0)
+    if n > 0:
+        t = np.arange(n) / SR
+        k = -math.log(70 / 150) / 0.05
+        phase = 2 * math.pi * 150 * pitch * (1 - np.exp(-k * t)) / k
+        env = np.exp(np.log(0.0004 / (gain * 0.7)) * t / 0.07)
+        mix[i0:i0 + n] += np.sin(phase) * env * gain * 0.7
+
+
 def add_carriage(t0, gain):
     """对应 LiveAudio.carriage():擦键 zip(0.18s 上扫)+ 铃 ding(C7 2093Hz + 2.76 倍非谐泛音)。"""
     i0 = int(t0 * SR)
@@ -186,6 +313,20 @@ for e in events:
         add_type(e["t"], e.get("gain", 0.09), e.get("pitch", 1.0))
     elif ty == "carriage":
         add_carriage(e["t"], e.get("gain", 0.06))
+    elif ty == "knock":
+        add_knock(e["t"], e.get("gain", 0.10), e.get("pitch", 1.0))
+    elif ty == "brush":
+        add_brush(e["t"], e.get("gain", 0.05), e.get("pitch", 1.0))
+    elif ty == "flutter":
+        add_flutter(e["t"], e.get("gain", 0.04), e.get("pitch", 1.0))
+    elif ty == "blip":
+        add_blip(e["t"], e.get("freq", 320), e.get("gain", 0.06))
+    elif ty == "stream":
+        add_stream(e["t"], e.get("dur", 4), e.get("gain", 0.05))
+    elif ty == "chirp":
+        add_chirp(e["t"], e.get("gain", 0.05), e.get("pitch", 1.0))
+    elif ty == "swish":
+        add_swish(e["t"], e.get("gain", 0.04), e.get("pitch", 1.0))
     elif ty == "takeoff":
         add_pluck(e["t"], e["freq"], 0.07, 0.5, gliss=True)
         add_whoosh(e["t"], 0.7 + rng.uniform(0, 0.3), 0.040)

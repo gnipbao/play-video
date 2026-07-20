@@ -118,8 +118,9 @@ window.Engine = (function () {
     const btnSound = document.getElementById("btn-sound");
     const btnVoice = document.getElementById("btn-voice");
     const ui = E.cfg.ui || {};
-    if (ui.tip) overlay.querySelector(".tip").textContent = ui.tip;
-    if (ui.sub) overlay.querySelector(".sub").textContent = ui.sub;
+    const tipEl = overlay.querySelector(".tip"), subEl = overlay.querySelector(".sub");
+    if (ui.tip && tipEl) tipEl.textContent = ui.tip;   // record.html 的 overlay 无文案节点
+    if (ui.sub && subEl) subEl.textContent = ui.sub;
 
     const startLive = () => {
       if (STATIC_T !== null) return;

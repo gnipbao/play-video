@@ -7,6 +7,26 @@
 
 window.WORKS = [
   {
+    id: "yanfan",
+    title: "Yanfan",
+    subtitle: "燕返",
+    desc: "一张横线稿纸浮在留白里,上半页写满手写信。红鲤游来,字迹化作墨燕随它盘旋出纸;燕群折返,又一只只归位,重聚成书。移动鼠标,惊起这一纸燕。",
+    film: "films/yanfan.mp4",
+    play: "scenes/yanfan/",
+    duration: "0:10",
+    year: "2026.07",
+  },
+  {
+    id: "puppet",
+    title: "Marionette",
+    subtitle: "提线木偶",
+    desc: "移动鼠标,你就是操纵者:提起、荡起、甩飞——线一紧,木偶就醒了;手一停,它又垂回线下沉沉睡去。",
+    film: "films/puppet.mp4",
+    play: "scenes/puppet/",
+    duration: "0:14",
+    year: "2026.07",
+  },
+  {
     id: "typewriter",
     title: "Typing Bird",
     subtitle: "打字机 × 飞鸟",
