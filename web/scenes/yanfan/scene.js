@@ -335,6 +335,17 @@
     if (sp > max) { p.fvx *= max / sp; p.fvy *= max / sp; }
   }
 
+  /* 过弯侧倾:航向角变化率 → 平滑的 bank 角(存在粒子上) */
+  function bankOf(p, dt) {
+    const h = Math.atan2(p.fvy, p.fvx);
+    let dh = h - (p.prevH === undefined ? h : p.prevH);
+    if (dh > Math.PI) dh -= Math.PI * 2;
+    else if (dh < -Math.PI) dh += Math.PI * 2;
+    p.prevH = h;
+    const target = Math.max(-0.9, Math.min(0.9, (dh / Math.max(dt, 1e-3)) * 0.16));
+    p.bank = (p.bank || 0) + (target - (p.bank || 0)) * Math.min(1, dt * 5);
+  }
+
   function sceneUpdate(dt, t, input) {
     const [bx, by] = birdPos(t);
     const [bvx, bvy] = birdVel(t);
@@ -404,6 +415,7 @@
             }
           }
         }
+        bankOf(c, dt);   // 过弯侧倾(姿态用)
       }
     }
 
@@ -418,8 +430,10 @@
       } else if (w.state === "bird") {
         if (t < w.exitT) flockFly(w, dt, t, input);
         else w.state = "exit";
+        bankOf(w, dt);
       } else if (w.state === "exit") {
         flyTo(w, w.ex, w.ey, 5.0, 1.2, 1.2, dt);
+        bankOf(w, dt);
         if (w.fx > W + 30) w.state = "gone";
       }
     }
@@ -547,9 +561,10 @@
 
   /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
      只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);远处只是小墨点。
-     朝向完全跟随飞行方向(最早的轨迹姿态),左飞水平翻转保持正立,不翻滚 */
+     姿态对齐参考视频:朝向完全跟随运动方向(俯冲倒转不刻意正立、不翻转),
+     过弯按转向率侧倾压弯(bank) */
   const POSES = [2, 4, 5];
-  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
+  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha, roll) {
     if (s < 2.4 || !birdVec) {                  // 远:一个墨点
       noStroke();
       fill(INK[0], INK[1], INK[2], alpha);
@@ -563,9 +578,9 @@
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading);                              // 机头朝飞行方向
-    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞翻转,保持正立不翻滚
-    scale(s * 0.075);
+    rotate(heading);                              // 机头完全跟随运动方向
+    const bank = Math.max(0.35, Math.cos(roll || 0));   // 过弯侧倾压弯
+    scale(s * 0.075, s * 0.075 * bank);
     translate(-spec.w / 2, -spec.h / 2);
     noStroke();
     fill(INK[0], INK[1], INK[2], alpha);
@@ -583,11 +598,11 @@
     push();
     for (const c of chars) {
       if (c.state !== "bird" || c.bvis <= 0.02) continue;
-      drawBirdSprite(c.fx, c.fy, c.fvx, c.fvy, c.scl, c.seed, t, 225 * c.bvis);
+      drawBirdSprite(c.fx, c.fy, c.fvx, c.fvy, c.scl, c.seed, t, 225 * c.bvis, c.bank);
     }
     for (const w of wilds) {
       if ((w.state !== "bird" && w.state !== "exit") || w.bvis <= 0.02) continue;
-      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis);
+      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis, w.bank);
     }
     pop();
   }
@@ -601,7 +616,7 @@
       if (!p1) continue;
       drawBirdSprite(p1[0], p1[1],
                      p0 ? (p1[0] - p0[0]) / 0.06 : 60, p0 ? (p1[1] - p0[1]) / 0.06 : 0,
-                     f.s, f.s * 3, t, 200);
+                     f.s, f.s * 3, t, 200, 0);
     }
     pop();
   }
