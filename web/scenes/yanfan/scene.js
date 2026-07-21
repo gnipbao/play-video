@@ -538,12 +538,13 @@
     pop();
   }
 
-  /* 墨燕造型(对齐原片):两笔极简墨痕——一弯翼(弯刀新月,腹朝飞行方向鼓,
-     翼尖向后掠) + 中间一撮小叉尾;flap∈[-1,1] → 翼弯弧度如扇翅呼吸 */
+  /* 墨燕造型(对齐原片):刚性两笔,不变形——一弯翼(弯刀新月,腹朝飞行
+     方向鼓,翼尖向后掠) + 一笔身尾(从翼腹下穿过,末端小叉,永不断开);
+     flap 只由调用方转成整体轻微滚转,形状本身不随时间脉动 */
   function drawSwallowShape(s, flap, col, alpha) {
     const L = s * 1.5;                        // 半翼展
     const sw = s * 0.7;                       // 翼尖后掠
-    const C = s * (0.5 + 0.4 * flap);         // 翼腹前鼓(扇翅呼吸)
+    const C = s * 0.55;                       // 翼腹前鼓(固定)
     const Wd = Math.max(0.7, s * 0.45);       // 翼厚
     noStroke();
     fill(col[0], col[1], col[2], alpha);
@@ -552,9 +553,9 @@
     quadraticVertex(2 * C + sw, 0, -sw, L);             // 翼腹弧(朝前鼓)
     quadraticVertex(2 * (C - Wd) + sw, 0, -sw, -L);     // 翼背弧
     endShape(CLOSE);
-    // 中间小叉尾(两短羽,指向身后)
-    triangle(-s * 0.05, -s * 0.07, -s * 1.35, -s * 0.3, -s * 1.2, 0);
-    triangle(-s * 0.05, s * 0.07, -s * 1.35, s * 0.3, -s * 1.2, 0);
+    // 身尾一笔:细楔从翼腹下穿到身后,末端分成小叉(与翼始终相连)
+    triangle(s * 0.45, 0, -s * 1.3, -s * 0.3, -s * 1.35, 0);
+    triangle(s * 0.45, 0, -s * 1.35, 0, -s * 1.3, s * 0.3);
   }
 
   function drawInkBirds(t) {
@@ -565,7 +566,7 @@
       const flap = Math.sin(t * (7 + c.seed % 3) + c.seed * 9);
       push();
       translate(c.fx, c.fy);
-      rotate(ang + Math.sin(c.seed) * 0.45);     // 各自的笔势倾角
+      rotate(ang + Math.sin(c.seed) * 0.45 + flap * 0.18);   // 笔势倾角 + 扇翅滚转(不变形)
       if (Math.sin(c.seed * 3) > 0) scale(1, -1); // 腹向随机,笔触不一
       drawSwallowShape(c.scl, flap, INK, 225 * c.bvis);
       pop();
@@ -576,7 +577,7 @@
       const flap = Math.sin(t * (7 + w.seed % 3) + w.seed * 9);
       push();
       translate(w.fx, w.fy);
-      rotate(ang + Math.sin(w.seed) * 0.45);
+      rotate(ang + Math.sin(w.seed) * 0.45 + flap * 0.18);
       if (Math.sin(w.seed * 3) > 0) scale(1, -1);
       drawSwallowShape(w.scl, flap, INK, 215 * w.bvis);
       pop();
@@ -595,7 +596,7 @@
       const flap = Math.sin(t * 6.5 + f.s * 3);
       push();
       translate(p1[0], p1[1]);
-      rotate(ang + Math.sin(f.s * 7) * 0.35);
+      rotate(ang + Math.sin(f.s * 7) * 0.35 + flap * 0.18);
       drawSwallowShape(f.s, flap, INK, 200);
       pop();
     }
