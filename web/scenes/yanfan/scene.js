@@ -10,7 +10,7 @@
  *   - 字迹 ⇄ 燕子:同一粒子,ink/break/bird 三态;化燕由
  *     红鲤临近 + 自上而下的时间波驱动,边缘不规则
  *   - 燕群:多股流(红鲤尾流 + 左右两个游移涡心),弧线/环形,
- *     不是随机噪点;远=墨点,中=短弧双翼,近=展翅飞燕
+ *     不是随机噪点;造型对齐原片:一笔弯刀墨痕(新月形,极简)
  *   - 纸面液态位移:以红鲤为中心的位移场(径向推 + 切向旋),
  *     作用于横线/红线/纸边,鲤过回弹
  *
@@ -538,39 +538,19 @@
     pop();
   }
 
-  /* 墨燕造型:远=墨点,近=飞燕剪影(镰形长翼 + 剪刀尾,燕子招牌特征);
-     flap∈[-1,1] 扇翅相位。实心剪影,缩到中景也读得出 */
+  /* 墨燕造型(对齐原片):一笔弯刀墨痕——新月形笔触,两头尖、腹中饱满,
+     极简无细节;flap∈[-1,1] → 弧度如扇翅般呼吸。远近只是尺度差 */
   function drawSwallowShape(s, flap, col, alpha) {
-    if (s < 2.4) {                            // 远:一个墨点
-      noStroke();
-      fill(col[0], col[1], col[2], alpha);
-      circle(0, 0, s * 1.8);
-      return;
-    }
+    const L = s * 1.7;                        // 半长
+    const C = s * (0.55 + 0.4 * flap);        // 弧度(呼吸)
+    const Wd = Math.max(0.8, s * 0.5);        // 腹厚
+    const belly = -C + Wd;
     noStroke();
-    // 远侧翼(略小略淡,相位相反,增加层次)
-    fill(col[0], col[1], col[2], alpha * 0.55);
-    wingBlade(s * 0.85, -flap);
-    // 剪刀尾:两条长尾羽(燕子最重要的识别特征)
     fill(col[0], col[1], col[2], alpha);
-    triangle(-s * 0.4, -s * 0.06, -s * 2.0, -s * 0.52, -s * 1.75, -s * 0.08);
-    triangle(-s * 0.4, s * 0.06, -s * 2.0, s * 0.52, -s * 1.75, s * 0.08);
-    // 身体(细长流线)与头、喙
-    ellipse(0, 0, s * 1.8, s * 0.55);
-    circle(s * 0.75, -s * 0.06, s * 0.5);
-    triangle(s * 0.95, -s * 0.12, s * 1.4, -s * 0.02, s * 0.95, s * 0.08);
-    // 近侧翼(主翼,镰形,绕肩扇动)
-    wingBlade(s, flap);
-  }
-
-  /* 一片镰翼:弯刀形,翼尖后掠;flap>0 翼上扬,<0 翼下压 */
-  function wingBlade(s, flap) {
-    const tx = -s * (0.7 + 0.2 * Math.abs(flap));
-    const ty = -s * (0.5 + 1.7 * flap);
     beginShape();
-    vertex(s * 0.45, -s * 0.14);                                       // 肩前
-    quadraticVertex(tx * 0.4 + s * 0.25, ty * 0.45, tx, ty);           // 前缘鼓到翼尖
-    quadraticVertex(tx * 0.62 - s * 0.28, ty * 0.55, -s * 0.3, s * 0.14);  // 后缘收回肩后
+    vertex(-L, 0);
+    quadraticVertex(0, -2 * C, L, 0);         // 背弧(过顶点 (0,-C))
+    quadraticVertex(0, 2 * belly, -L, 0);     // 腹弧
     endShape(CLOSE);
   }
 
@@ -582,7 +562,8 @@
       const flap = Math.sin(t * (7 + c.seed % 3) + c.seed * 9);
       push();
       translate(c.fx, c.fy);
-      rotate(ang);
+      rotate(ang + Math.sin(c.seed) * 0.45);     // 各自的笔势倾角
+      if (Math.sin(c.seed * 3) > 0) scale(1, -1); // 腹向随机,笔触不一
       drawSwallowShape(c.scl, flap, INK, 225 * c.bvis);
       pop();
     }
@@ -592,7 +573,8 @@
       const flap = Math.sin(t * (7 + w.seed % 3) + w.seed * 9);
       push();
       translate(w.fx, w.fy);
-      rotate(ang);
+      rotate(ang + Math.sin(w.seed) * 0.45);
+      if (Math.sin(w.seed * 3) > 0) scale(1, -1);
       drawSwallowShape(w.scl, flap, INK, 215 * w.bvis);
       pop();
     }
@@ -610,7 +592,7 @@
       const flap = Math.sin(t * 6.5 + f.s * 3);
       push();
       translate(p1[0], p1[1]);
-      rotate(ang);
+      rotate(ang + Math.sin(f.s * 7) * 0.35);
       drawSwallowShape(f.s, flap, INK, 200);
       pop();
     }
