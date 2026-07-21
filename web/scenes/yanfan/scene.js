@@ -632,17 +632,32 @@
     push();
     translate(sx, sy);
     rotate(speed > 8 ? ang + roll : Math.sin(t * 1.2) * 0.1);   // 静止时轻轻摇晃
-    // 脊椎波浪:静止时小幅怠速摆动,游动时波幅随速度
+    // 骨骼链波浪:先算脊椎曲线上每节的点位,再逐节按切线角摆放贴图条带
+    // (条带随关节旋转而非上下错动,关节连续,游动丝滑);
+    // 静止时小幅怠速摆动,游动时波幅随速度
     const amp = 1.6 + Math.min(6.5, speed * 0.022);
     const KW = 118, KH = KW * koiImg.height / koiImg.width;
-    const N = 26, dw = KW / N, sw = koiImg.width / N;
-    imageMode(CORNER);
+    const N = 30, dw = KW / N, sw = koiImg.width / N;
+    const spine = [];
     for (let i = 0; i < N; i++) {
-      const f0 = i / N;                                // 0=尾鳍端 1=头端
-      const tailness = Math.pow(1 - f0, 1.4);          // 波幅向尾部递增
-      const dy = Math.sin(strokePh * 1.6 - f0 * 2.4) * amp * tailness;
-      image(koiImg, -KW / 2 + i * dw, -KH / 2 + dy, dw + 0.6, KH,
+      const f0 = (i + 0.5) / N;                          // 0=尾鳍端 1=头端
+      const envelope = 0.15 + 0.85 * Math.pow(1 - f0, 1.2);   // 波幅向尾部递增
+      spine.push([
+        -KW / 2 + f0 * KW,
+        Math.sin(strokePh * 1.6 - f0 * 3.0) * amp * envelope,
+      ]);
+    }
+    imageMode(CENTER);
+    for (let i = 0; i < N; i++) {
+      const [x, y] = spine[i];
+      const [xa, ya] = spine[Math.max(0, i - 1)];
+      const [xb, yb] = spine[Math.min(N - 1, i + 1)];
+      push();
+      translate(x, y);
+      rotate(Math.atan2(yb - ya, xb - xa));              // 局部切线角
+      image(koiImg, 0, 0, dw + 0.8, KH,
             Math.floor(i * sw), 0, Math.ceil(sw), koiImg.height);
+      pop();
     }
     pop();
   }
