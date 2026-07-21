@@ -540,9 +540,9 @@
     pop();
   }
 
-  /* 墨燕(打字机同款):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
+  /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
      只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);远处只是小墨点。
-     倾斜只部分跟随航向(不翻滚),左飞水平翻转,飞行自然 */
+     朝向完全跟随飞行方向(最早的轨迹姿态),左飞水平翻转保持正立,不翻滚 */
   const POSES = [2, 4, 5];
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
     if (s < 2.4 || !birdVec) {                  // 远:一个墨点
@@ -558,8 +558,8 @@
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading * 0.35 + Math.sin(t * 3 + seed) * 0.08);   // 部分随航向,轻轻起伏
-    if (vx < 0) scale(-1, 1);                                 // 左飞翻转,保持正立
+    rotate(heading);                              // 机头朝飞行方向
+    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞翻转,保持正立不翻滚
     scale(s * 0.075);
     translate(-spec.w / 2, -spec.h / 2);
     noStroke();
@@ -601,8 +601,9 @@
     pop();
   }
 
-  /* 红鲤:koi.png 贴图渲染(位图,非矢量形状);
-     摆尾推进(冲程涌动 + 转弯侧倾 + 贴图轻摆) + 身后水痕 */
+  /* 红鲤:koi.png 贴图 + 脊椎条带波浪(游戏式游动)——贴图切成竖条,
+     每条按从头向尾传播的行波横向错动,身体如真鱼般扭动;
+     叠加冲程涌动、转弯侧倾与身后水痕 */
   function drawRedCarp(t) {
     // 水痕(尾迹渐隐)
     push();
@@ -630,12 +631,19 @@
 
     push();
     translate(sx, sy);
-    rotate(speed > 8 ? ang + roll + Math.sin(t * 3.2) * 0.06
-                     : Math.sin(t * 1.2) * 0.1);          // 静止时轻轻摇晃
-    rotate(Math.sin(strokePh * 1.6) * 0.06);              // 摆尾轻摆
-    imageMode(CENTER);
-    const kw = 118;                                       // 贴图宽(含尾鳍)
-    image(koiImg, 0, 0, kw, kw * koiImg.height / koiImg.width);
+    rotate(speed > 8 ? ang + roll : Math.sin(t * 1.2) * 0.1);   // 静止时轻轻摇晃
+    // 脊椎波浪:静止时小幅怠速摆动,游动时波幅随速度
+    const amp = 1.6 + Math.min(6.5, speed * 0.022);
+    const KW = 118, KH = KW * koiImg.height / koiImg.width;
+    const N = 26, dw = KW / N, sw = koiImg.width / N;
+    imageMode(CORNER);
+    for (let i = 0; i < N; i++) {
+      const f0 = i / N;                                // 0=尾鳍端 1=头端
+      const tailness = Math.pow(1 - f0, 1.4);          // 波幅向尾部递增
+      const dy = Math.sin(strokePh * 1.6 - f0 * 2.4) * amp * tailness;
+      image(koiImg, -KW / 2 + i * dw, -KH / 2 + dy, dw + 0.6, KH,
+            Math.floor(i * sw), 0, Math.ceil(sw), koiImg.height);
+    }
     pop();
   }
 
