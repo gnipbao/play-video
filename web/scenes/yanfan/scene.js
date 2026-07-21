@@ -10,7 +10,7 @@
  *   - 字迹 ⇄ 燕子:同一粒子,ink/break/bird 三态;化燕由
  *     红鲤临近 + 自上而下的时间波驱动,边缘不规则
  *   - 燕群:多股流(红鲤尾流 + 左右两个游移涡心),弧线/环形,
- *     不是随机噪点;造型复用打字机场景同款燕子轮廓(birds.json,扑翼姿态轮换)
+ *     不是随机噪点;造型为程序化平面挥翅(椭圆身 + 三角翼,翼尖垂直振荡)
  *   - 纸面液态位移:以红鲤为中心的位移场(径向推 + 切向旋),
  *     作用于横线/红线/纸边,鲤过回弹
  *
@@ -94,7 +94,6 @@
   /* ---------------- 场景状态 ---------------- */
   let paper;
   let fontWrite;
-  let birdVec = null;        // /assets/birds.json:燕子轮廓点集(打字机同款,5 种扑翼姿态)
   let koiImg = null;         // /assets/koi.png:红鲤贴图(透明底)
   let chars = [];            // 字迹(⇄ 燕子,同一粒子)
   let wilds = [];            // 野燕:片头飞入、片尾离场的散燕
@@ -545,37 +544,28 @@
     pop();
   }
 
-  /* 墨燕(对齐 示例.mp4 的平面挥翅):
-     挥翅 = birds.json 五姿态按 [1,3,4,2] 四拍 8Hz 轮换(翼上抬→下压,幅度大);
-     姿态 = 只取航向的 30% 倾斜 + 快速微晃,左飞水平镜像——鸟身始终平飞,
-     不整体转向、不反转、不压弯;远处只是小墨点 */
-  const FLAP = [1, 3, 4, 2];
+  /* 墨燕(对齐参考 sketch e9dob0hJ_ 的平面挥翅):小椭圆身 + 一片大三角翼,
+     翼尖在飞行方向的垂线上按 sin(flap) 上下振荡——扇翅发生在平面内,
+     不镜像、不反转、不压弯;朝向平面内随航向;远处只是小墨点 */
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
-    if (s < 2.4 || !birdVec) {                  // 远:一个墨点
+    if (s < 2.4) {                              // 远:一个墨点
       noStroke();
       fill(INK[0], INK[1], INK[2], alpha);
       circle(x, y, s * 1.8);
       return;
     }
-    const pose = FLAP[Math.floor(t * 8 + seed * 7) % FLAP.length];
-    const spec = birdVec["bird" + pose];
-    if (!spec) return;
+    const k = s * 0.075;                        // 尺寸系数
+    const sp = Math.hypot(vx, vy);
+    const wing = Math.sin(t * (8 + sp * 0.02) + seed * 9);   // 扇翅相位(随速度)
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading * 0.3 + Math.sin(t * 10 + seed) * 0.18);   // 轻度倾斜 + 微晃
-    if (vx < 0) scale(-1, 1);                                 // 左飞水平镜像
-    scale(s * 0.075);
-    translate(-spec.w / 2, -spec.h / 2);
+    rotate(heading);                            // 平面内整体转向
     noStroke();
-    fill(INK[0], INK[1], INK[2], alpha);
-    const pts = spec.pts;
-    beginShape();
-    curveVertex(pts[0][0], pts[0][1]);
-    for (const [px, py] of pts) curveVertex(px, py);
-    curveVertex(pts[0][0], pts[0][1]);
-    curveVertex(pts[1][0], pts[1][1]);
-    endShape(CLOSE);
+    fill(INK[0], INK[1], INK[2], alpha * (0.75 + 0.25 * Math.abs(wing)));
+    ellipse(2 * k, 0, 10 * k, 4.5 * k);                   // 身(略前置)
+    // 翼:大三角,翼尖后掠并在垂线上按 sin 振荡(平面上下扇)
+    triangle(-15 * k, 0, 22 * k, 0, -5 * k, -17 * k * wing);
     pop();
   }
 
@@ -729,7 +719,6 @@
     input: { attack: 5.0, release: 1.0 },
     preload() {
       fontWrite = loadFont("/assets/fonts/mashanzheng-sub.ttf");   // p5 loadFont 只认 ttf/otf
-      birdVec = loadJSON("/assets/birds.json");   // 燕子轮廓(与 typewriter 场景同款)
       koiImg = loadImage("/assets/koi.png");      // 红鲤贴图
     },
     build() {
