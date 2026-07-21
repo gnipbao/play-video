@@ -541,7 +541,9 @@
   }
 
   /* 墨燕(打字机同款):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
-     远处只是小墨点。左飞时翻转保持正立,形状刚性不变形 */
+     只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);远处只是小墨点。
+     倾斜只部分跟随航向(不翻滚),左飞水平翻转,飞行自然 */
+  const POSES = [2, 4, 5];
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
     if (s < 2.4 || !birdVec) {                  // 远:一个墨点
       noStroke();
@@ -550,14 +552,14 @@
       return;
     }
     const sp = Math.hypot(vx, vy);
-    const pose = 1 + (Math.floor(t * (6 + sp / 60) + seed * 7) % 5);
+    const pose = POSES[Math.floor(t * (6 + sp / 60) + seed * 7) % POSES.length];
     const spec = birdVec["bird" + pose];
     if (!spec) return;
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading + Math.sin(seed * 3) * 0.2);   // 各自的笔势倾角
-    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞保持正立
+    rotate(heading * 0.35 + Math.sin(t * 3 + seed) * 0.08);   // 部分随航向,轻轻起伏
+    if (vx < 0) scale(-1, 1);                                 // 左飞翻转,保持正立
     scale(s * 0.075);
     translate(-spec.w / 2, -spec.h / 2);
     noStroke();
