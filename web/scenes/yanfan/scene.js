@@ -545,11 +545,11 @@
     pop();
   }
 
-  /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换
-     (平面内挥翅);只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);
-     远处只是小墨点。平面动画逻辑:剪影在平面内整体转向任意角度
-     (倒置也没关系,剪影无正反面),不镜像反转、不压弯扭动 */
-  const POSES = [2, 4, 5];
+  /* 墨燕(对齐 示例.mp4 的平面挥翅):
+     挥翅 = birds.json 五姿态按 [1,3,4,2] 四拍 8Hz 轮换(翼上抬→下压,幅度大);
+     姿态 = 只取航向的 30% 倾斜 + 快速微晃,左飞水平镜像——鸟身始终平飞,
+     不整体转向、不反转、不压弯;远处只是小墨点 */
+  const FLAP = [1, 3, 4, 2];
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
     if (s < 2.4 || !birdVec) {                  // 远:一个墨点
       noStroke();
@@ -557,14 +557,14 @@
       circle(x, y, s * 1.8);
       return;
     }
-    const sp = Math.hypot(vx, vy);
-    const pose = POSES[Math.floor(t * (7 + sp / 50) + seed * 7) % POSES.length];
+    const pose = FLAP[Math.floor(t * 8 + seed * 7) % FLAP.length];
     const spec = birdVec["bird" + pose];
     if (!spec) return;
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading);                              // 平面内整体转向
+    rotate(heading * 0.3 + Math.sin(t * 10 + seed) * 0.18);   // 轻度倾斜 + 微晃
+    if (vx < 0) scale(-1, 1);                                 // 左飞水平镜像
     scale(s * 0.075);
     translate(-spec.w / 2, -spec.h / 2);
     noStroke();
