@@ -538,24 +538,49 @@
     pop();
   }
 
-  /* 墨燕造型(对齐原片):刚性两笔,不变形——一弯翼(弯刀新月,腹朝飞行
-     方向鼓,翼尖向后掠) + 一笔身尾(从翼腹下穿过,末端小叉,永不断开);
-     flap 只由调用方转成整体轻微滚转,形状本身不随时间脉动 */
+  /* 墨燕造型(对齐 燕子.png 设定图):流线身体 + 长叉尾羽 + 一把绕肩扇动
+     的镰刀翼(关节旋转,不是形变;翼根始终锚在肩上);远处只是小墨点 */
   function drawSwallowShape(s, flap, col, alpha) {
-    const L = s * 1.5;                        // 半翼展
-    const sw = s * 0.7;                       // 翼尖后掠
-    const C = s * 0.55;                       // 翼腹前鼓(固定)
-    const Wd = Math.max(0.7, s * 0.45);       // 翼厚
+    if (s < 2.4) {                            // 远:一个墨点
+      noStroke();
+      fill(col[0], col[1], col[2], alpha);
+      circle(0, 0, s * 1.8);
+      return;
+    }
     noStroke();
+    // 远侧翼(略小略淡,相位相反;只在中大只时画,小燕免杂乱)
+    if (s >= 4.5) {
+      fill(col[0], col[1], col[2], alpha * 0.55);
+      drawWing(s * 0.9, -0.5 - flap * 0.45);
+    }
+    // 长叉尾:两条飘带尾羽(燕子招牌,先于身体画,压在身下)
     fill(col[0], col[1], col[2], alpha);
+    triangle(-s * 0.85, -s * 0.03, -s * 1.85, -s * 0.46, -s * 1.7, -s * 0.09);
+    triangle(-s * 0.85, s * 0.03, -s * 1.85, s * 0.46, -s * 1.7, s * 0.11);
+    // 身体:流线泪滴(头右尾左) + 尖喙
     beginShape();
-    vertex(-sw, -L);
-    quadraticVertex(2 * C + sw, 0, -sw, L);             // 翼腹弧(朝前鼓)
-    quadraticVertex(2 * (C - Wd) + sw, 0, -sw, -L);     // 翼背弧
+    vertex(s * 1.1, -s * 0.05);                                    // 喙尖
+    quadraticVertex(s * 0.95, -s * 0.32, s * 0.45, -s * 0.28);     // 头顶
+    quadraticVertex(-s * 0.5, -s * 0.22, -s * 0.95, -s * 0.02);    // 背 → 尾根
+    quadraticVertex(-s * 0.5, s * 0.24, s * 0.4, s * 0.2);         // 腹
+    quadraticVertex(s * 0.92, s * 0.14, s * 1.1, -s * 0.05);       // 颌
     endShape(CLOSE);
-    // 身尾一笔:细楔从翼腹下穿到身后,末端分成小叉(与翼始终相连)
-    triangle(s * 0.45, 0, -s * 1.3, -s * 0.3, -s * 1.35, 0);
-    triangle(s * 0.45, 0, -s * 1.35, 0, -s * 1.3, s * 0.3);
+    // 近侧翼(主翼,镰刀形,绕肩扇动;摆角限制在上半区,不与尾羽交叉)
+    fill(col[0], col[1], col[2], alpha);
+    drawWing(s, -0.5 + flap * 0.45);
+  }
+
+  /* 一把镰翼:肩在 (s*0.3,-s*0.1),翼尖长而向后弯;a 为绕肩摆角(弧度) */
+  function drawWing(s, a) {
+    push();
+    translate(s * 0.3, -s * 0.1);
+    rotate(a);
+    beginShape();
+    vertex(s * 0.15, s * 0.05);                                    // 肩下
+    quadraticVertex(-s * 0.45, -s * 0.65, -s * 0.6, -s * 2.0);     // 前缘鼓到翼尖
+    quadraticVertex(-s * 0.25, -s * 1.05, s * 0.2, -s * 0.1);      // 后缘收回肩上
+    endShape(CLOSE);
+    pop();
   }
 
   function drawInkBirds(t) {
@@ -603,7 +628,8 @@
     pop();
   }
 
-  /* 红鲤(放大版):摆尾推进(冲程涌动 + 转弯侧倾) + 三缕飘逸尾鳍 + 身后水痕 */
+  /* 红鲤(放大版,对齐 鲤鱼.png 设定图):鳞身 + 胸鳍/背鳍 + 鱼须 +
+     两条大飘带尾鳍;摆尾推进(冲程涌动 + 转弯侧倾) + 身后水痕 */
   function drawRedCarp(t) {
     const S = 1.5;                              // 鲤鱼整体放大
     // 水痕(尾迹渐隐)
@@ -628,37 +654,69 @@
     // 冲程涌动:摆尾推进时身体沿泳向一冲一滑
     const surge = Math.sin(strokePh) * Math.min(3, 0.8 + speed * 0.006);
     const sx = fx + Math.cos(ang) * surge, sy = fy + Math.sin(ang) * surge;
-    const wagAmp = (4 + Math.min(6, speed * 0.014)) * S;
     const wagPh = strokePh * 1.6;
 
     push();
     translate(sx, sy);
     rotate(speed > 8 ? ang + roll + Math.sin(t * 3.2) * 0.06
                      : Math.sin(t * 1.2) * 0.1);          // 静止时轻轻摇晃
-    // 尾鳍三缕(向后飘,摆动与冲程同步)
-    noFill();
-    stroke(RED[0], RED[1], RED[2], 190);
-    strokeWeight(2.2 * S);
-    for (let j = -1; j <= 1; j++) {
-      const wig = Math.sin(wagPh + j * 1.8) * wagAmp;
-      bezier(-12 * S, j * 3 * S,
-             -24 * S, j * 7 * S + wig,
-             -34 * S, j * 11 * S + wig * 1.4,
-             -44 * S, j * 13 * S + wig * 1.8);
-    }
-    // 身体(随冲程轻微伸缩)
-    const stretch = 1 + Math.sin(strokePh) * 0.05;
+    // —— 锦鲤造型(对齐 鲤鱼.png 设定图)——
+    const wig = Math.sin(wagPh) * (1.5 + Math.min(3, speed * 0.008));
+    // 尾鳍:两条大飘带 + 一缕中丝(向后飘,摆动与冲程同步)
     noStroke();
+    fill(RED[0], RED[1], RED[2], 210);
+    for (const dir of [-1, 1]) {              // 上/下飘带
+      beginShape();
+      vertex(-18 * S, dir * 1.5 * S);
+      quadraticVertex(-30 * S, dir * (7 + wig) * S,
+                      -40 * S, dir * (15 + wig * 1.6) * S);   // 外缘到飘尖
+      quadraticVertex(-33 * S, dir * (9 + wig) * S, -24 * S, dir * 3.5 * S); // 内缘回
+      endShape(CLOSE);
+    }
+    fill(RED[0], RED[1], RED[2], 170);        // 中丝
+    triangle(-18 * S, -1.5 * S, -38 * S, (wig * 1.4 - 2) * S, -38 * S, (wig * 1.4 + 2) * S);
+    // 身体:弓背鱼雷形(头右尾左)
     fill(RED[0], RED[1], RED[2], 235);
-    ellipse(0, 0, 30 * S * stretch, 15 * S);
-    // 头与眼
-    fill(RED[0] - 20, RED[1] - 12, RED[2] - 8, 245);
-    ellipse(9 * S, 0, 18 * S, 13 * S);
+    beginShape();
+    vertex(20 * S, 0);                                            // 吻尖
+    quadraticVertex(19 * S, -9 * S, 6 * S, -8.5 * S);             // 背前
+    quadraticVertex(-9 * S, -8 * S, -17 * S, -2.5 * S);           // 背后收窄
+    quadraticVertex(-20 * S, 0, -17 * S, 2.5 * S);                // 尾柄
+    quadraticVertex(-9 * S, 8 * S, 6 * S, 8.5 * S);               // 腹
+    quadraticVertex(19 * S, 9 * S, 20 * S, 0);                    // 颌
+    endShape(CLOSE);
+    // 鳞:成排扇贝弧(暗红细线,只画中后段)
+    noFill();
+    stroke(110, 26, 20, 80);
+    strokeWeight(1);
+    for (let ri = 0; ri < 3; ri++) {
+      const ry = (-5 + ri * 4) * S, off = (ri % 2) * 2.75 * S;
+      for (let sx = -16 * S + off; sx <= 10 * S; sx += 5.5 * S) {
+        arc(sx, ry, 5 * S, 5 * S, Math.PI * 0.55, Math.PI * 1.45);
+      }
+    }
+    noStroke();
+    // 背鳍(小)
+    fill(RED[0], RED[1], RED[2], 190);
+    triangle(-4 * S, -8 * S, 5 * S, -8 * S, 0, -12.5 * S + Math.sin(t * 4) * S);
+    // 胸鳍(一扇,轻摆)
+    fill(RED[0], RED[1], RED[2], 210);
+    const finW = Math.sin(t * 3 + 1) * 1.5;
+    beginShape();
+    vertex(4 * S, 6 * S);
+    quadraticVertex(-2 * S, (13 + finW) * S, -9 * S, (15 + finW * 1.3) * S);
+    quadraticVertex(-3 * S, 8 * S, 4 * S, 6 * S);
+    endShape(CLOSE);
+    // 眼(白圈黑瞳)与须
+    fill(245, 240, 230, 240);
+    circle(13.5 * S, -2.5 * S, 3.4 * S);
     fill(20, 16, 12, 230);
-    circle(13 * S, -2.5 * S, 3.2 * S);
-    // 背鳍
-    fill(RED[0], RED[1], RED[2], 160);
-    triangle(-6 * S, -6 * S, 4 * S, -7 * S, -2 * S, -13 * S + Math.sin(t * 4) * 1.5);
+    circle(14 * S, -2.5 * S, 1.6 * S);
+    noFill();
+    stroke(RED[0], RED[1], RED[2], 220);
+    strokeWeight(1.2 * S);
+    bezier(19 * S, 1.5 * S, 23 * S, 3.5 * S, 25 * S, 6 * S, 24 * S, 8 * S);
+    bezier(19.5 * S, -1 * S, 23 * S, -2 * S, 24.5 * S, -3.5 * S, 24 * S, -4.5 * S);
     pop();
   }
 
