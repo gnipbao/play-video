@@ -544,9 +544,9 @@
     pop();
   }
 
-  /* 墨燕(对齐参考 sketch e9dob0hJ_ 的平面挥翅):小椭圆身 + 一片大三角翼,
-     翼尖在飞行方向的垂线上按 sin(flap) 上下振荡——扇翅发生在平面内,
-     不镜像、不反转、不压弯;朝向平面内随航向;远处只是小墨点 */
+  /* 墨燕:正常燕子剪影(流线身 + 尖喙 + 长叉尾) + 参考 sketch 的平面挥翅
+     ——大三角翼,翼尖在飞行方向垂线上按 sin(flap) 振荡;朝向平面内随航向,
+     不镜像、不反转、不压弯;远处只是小墨点 */
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
     if (s < 2.4) {                              // 远:一个墨点
       noStroke();
@@ -554,7 +554,6 @@
       circle(x, y, s * 1.8);
       return;
     }
-    const k = s * 0.075;                        // 尺寸系数
     const sp = Math.hypot(vx, vy);
     const wing = Math.sin(t * (8 + sp * 0.02) + seed * 9);   // 扇翅相位(随速度)
     const heading = Math.atan2(vy, vx);
@@ -562,10 +561,20 @@
     translate(x, y);
     rotate(heading);                            // 平面内整体转向
     noStroke();
-    fill(INK[0], INK[1], INK[2], alpha * (0.75 + 0.25 * Math.abs(wing)));
-    ellipse(2 * k, 0, 10 * k, 4.5 * k);                   // 身(略前置)
-    // 翼:大三角,翼尖后掠并在垂线上按 sin 振荡(平面上下扇)
-    triangle(-15 * k, 0, 22 * k, 0, -5 * k, -17 * k * wing);
+    fill(INK[0], INK[1], INK[2], alpha);
+    // 长叉尾(燕子招牌,压在身下)
+    triangle(-s * 0.85, -s * 0.03, -s * 1.85, -s * 0.46, -s * 1.7, -s * 0.09);
+    triangle(-s * 0.85, s * 0.03, -s * 1.85, s * 0.46, -s * 1.7, s * 0.11);
+    // 身体:流线泪滴(头右尾左) + 尖喙
+    beginShape();
+    vertex(s * 1.1, -s * 0.05);                                    // 喙尖
+    quadraticVertex(s * 0.95, -s * 0.32, s * 0.45, -s * 0.28);     // 头顶
+    quadraticVertex(-s * 0.5, -s * 0.22, -s * 0.95, -s * 0.02);    // 背 → 尾根
+    quadraticVertex(-s * 0.5, s * 0.24, s * 0.4, s * 0.2);         // 腹
+    quadraticVertex(s * 0.92, s * 0.14, s * 1.1, -s * 0.05);       // 颌
+    endShape(CLOSE);
+    // 翼:大三角,翼尖后掠并沿垂线 sin 振荡(sketch 挥翅机制)
+    triangle(s * 0.45, -s * 0.06, -s * 0.25, s * 0.08, -s * 0.55, -s * 2.0 * wing);
     pop();
   }
 
