@@ -335,17 +335,6 @@
     if (sp > max) { p.fvx *= max / sp; p.fvy *= max / sp; }
   }
 
-  /* 过弯侧倾:航向角变化率 → 平滑的 bank 角(存在粒子上) */
-  function bankOf(p, dt) {
-    const h = Math.atan2(p.fvy, p.fvx);
-    let dh = h - (p.prevH === undefined ? h : p.prevH);
-    if (dh > Math.PI) dh -= Math.PI * 2;
-    else if (dh < -Math.PI) dh += Math.PI * 2;
-    p.prevH = h;
-    const target = Math.max(-0.9, Math.min(0.9, (dh / Math.max(dt, 1e-3)) * 0.16));
-    p.bank = (p.bank || 0) + (target - (p.bank || 0)) * Math.min(1, dt * 5);
-  }
-
   function sceneUpdate(dt, t, input) {
     const [bx, by] = birdPos(t);
     const [bvx, bvy] = birdVel(t);
@@ -415,7 +404,6 @@
             }
           }
         }
-        bankOf(c, dt);   // 过弯侧倾(姿态用)
       }
     }
 
@@ -430,10 +418,8 @@
       } else if (w.state === "bird") {
         if (t < w.exitT) flockFly(w, dt, t, input);
         else w.state = "exit";
-        bankOf(w, dt);
       } else if (w.state === "exit") {
         flyTo(w, w.ex, w.ey, 5.0, 1.2, 1.2, dt);
-        bankOf(w, dt);
         if (w.fx > W + 30) w.state = "gone";
       }
     }
@@ -560,11 +546,11 @@
   }
 
   /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换
-     (两个翅膀挥动);只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);
-     远处只是小墨点。身体随航向但镜像保持背朝上(不整体反转),
-     过弯按转向率侧倾压弯(bank) */
+     (平面内挥翅);只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);
+     远处只是小墨点。平面动画逻辑:剪影在平面内整体转向任意角度
+     (倒置也没关系,剪影无正反面),不镜像反转、不压弯扭动 */
   const POSES = [2, 4, 5];
-  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha, roll) {
+  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
     if (s < 2.4 || !birdVec) {                  // 远:一个墨点
       noStroke();
       fill(INK[0], INK[1], INK[2], alpha);
@@ -572,16 +558,14 @@
       return;
     }
     const sp = Math.hypot(vx, vy);
-    const pose = POSES[Math.floor(t * (6 + sp / 60) + seed * 7) % POSES.length];
+    const pose = POSES[Math.floor(t * (7 + sp / 50) + seed * 7) % POSES.length];
     const spec = birdVec["bird" + pose];
     if (!spec) return;
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading);                              // 机头随航向
-    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞镜像:背朝上,不整体反转
-    const bank = Math.max(0.35, Math.cos(roll || 0));   // 过弯侧倾压弯
-    scale(s * 0.075, s * 0.075 * bank);
+    rotate(heading);                              // 平面内整体转向
+    scale(s * 0.075);
     translate(-spec.w / 2, -spec.h / 2);
     noStroke();
     fill(INK[0], INK[1], INK[2], alpha);
@@ -599,11 +583,11 @@
     push();
     for (const c of chars) {
       if (c.state !== "bird" || c.bvis <= 0.02) continue;
-      drawBirdSprite(c.fx, c.fy, c.fvx, c.fvy, c.scl, c.seed, t, 225 * c.bvis, c.bank);
+      drawBirdSprite(c.fx, c.fy, c.fvx, c.fvy, c.scl, c.seed, t, 225 * c.bvis);
     }
     for (const w of wilds) {
       if ((w.state !== "bird" && w.state !== "exit") || w.bvis <= 0.02) continue;
-      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis, w.bank);
+      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis);
     }
     pop();
   }
@@ -617,7 +601,7 @@
       if (!p1) continue;
       drawBirdSprite(p1[0], p1[1],
                      p0 ? (p1[0] - p0[0]) / 0.06 : 60, p0 ? (p1[1] - p0[1]) / 0.06 : 0,
-                     f.s, f.s * 3, t, 200, 0);
+                     f.s, f.s * 3, t, 200);
     }
     pop();
   }
