@@ -10,7 +10,7 @@
  *   - 字迹 ⇄ 燕子:同一粒子,ink/break/bird 三态;化燕由
  *     红鲤临近 + 自上而下的时间波驱动,边缘不规则
  *   - 燕群:多股流(红鲤尾流 + 左右两个游移涡心),弧线/环形,
- *     不是随机噪点;造型对齐原片:一弯翼 + 中间小叉尾,两笔极简墨痕
+ *     不是随机噪点;造型复用打字机场景同款燕子轮廓(birds.json,扑翼姿态轮换)
  *   - 纸面液态位移:以红鲤为中心的位移场(径向推 + 切向旋),
  *     作用于横线/红线/纸边,鲤过回弹
  *
@@ -94,6 +94,8 @@
   /* ---------------- 场景状态 ---------------- */
   let paper;
   let fontWrite;
+  let birdVec = null;        // /assets/birds.json:燕子轮廓点集(打字机同款,5 种扑翼姿态)
+  let koiImg = null;         // /assets/koi.png:红鲤贴图(透明底)
   let chars = [];            // 字迹(⇄ 燕子,同一粒子)
   let wilds = [];            // 野燕:片头飞入、片尾离场的散燕
   let ripples = [];          // 横线弦:每根线的位移/速度(弹簧 + 波动传播)
@@ -538,47 +540,34 @@
     pop();
   }
 
-  /* 墨燕造型(对齐 燕子.png 设定图):流线身体 + 长叉尾羽 + 一把绕肩扇动
-     的镰刀翼(关节旋转,不是形变;翼根始终锚在肩上);远处只是小墨点 */
-  function drawSwallowShape(s, flap, col, alpha) {
-    if (s < 2.4) {                            // 远:一个墨点
+  /* 墨燕(打字机同款):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
+     远处只是小墨点。左飞时翻转保持正立,形状刚性不变形 */
+  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
+    if (s < 2.4 || !birdVec) {                  // 远:一个墨点
       noStroke();
-      fill(col[0], col[1], col[2], alpha);
-      circle(0, 0, s * 1.8);
+      fill(INK[0], INK[1], INK[2], alpha);
+      circle(x, y, s * 1.8);
       return;
     }
-    noStroke();
-    // 远侧翼(略小略淡,相位相反;只在中大只时画,小燕免杂乱)
-    if (s >= 4.5) {
-      fill(col[0], col[1], col[2], alpha * 0.55);
-      drawWing(s * 0.9, -0.5 - flap * 0.45);
-    }
-    // 长叉尾:两条飘带尾羽(燕子招牌,先于身体画,压在身下)
-    fill(col[0], col[1], col[2], alpha);
-    triangle(-s * 0.85, -s * 0.03, -s * 1.85, -s * 0.46, -s * 1.7, -s * 0.09);
-    triangle(-s * 0.85, s * 0.03, -s * 1.85, s * 0.46, -s * 1.7, s * 0.11);
-    // 身体:流线泪滴(头右尾左) + 尖喙
-    beginShape();
-    vertex(s * 1.1, -s * 0.05);                                    // 喙尖
-    quadraticVertex(s * 0.95, -s * 0.32, s * 0.45, -s * 0.28);     // 头顶
-    quadraticVertex(-s * 0.5, -s * 0.22, -s * 0.95, -s * 0.02);    // 背 → 尾根
-    quadraticVertex(-s * 0.5, s * 0.24, s * 0.4, s * 0.2);         // 腹
-    quadraticVertex(s * 0.92, s * 0.14, s * 1.1, -s * 0.05);       // 颌
-    endShape(CLOSE);
-    // 近侧翼(主翼,镰刀形,绕肩扇动;摆角限制在上半区,不与尾羽交叉)
-    fill(col[0], col[1], col[2], alpha);
-    drawWing(s, -0.5 + flap * 0.45);
-  }
-
-  /* 一把镰翼:肩在 (s*0.3,-s*0.1),翼尖长而向后弯;a 为绕肩摆角(弧度) */
-  function drawWing(s, a) {
+    const sp = Math.hypot(vx, vy);
+    const pose = 1 + (Math.floor(t * (6 + sp / 60) + seed * 7) % 5);
+    const spec = birdVec["bird" + pose];
+    if (!spec) return;
+    const heading = Math.atan2(vy, vx);
     push();
-    translate(s * 0.3, -s * 0.1);
-    rotate(a);
+    translate(x, y);
+    rotate(heading + Math.sin(seed * 3) * 0.2);   // 各自的笔势倾角
+    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞保持正立
+    scale(s * 0.075);
+    translate(-spec.w / 2, -spec.h / 2);
+    noStroke();
+    fill(INK[0], INK[1], INK[2], alpha);
+    const pts = spec.pts;
     beginShape();
-    vertex(s * 0.15, s * 0.05);                                    // 肩下
-    quadraticVertex(-s * 0.45, -s * 0.65, -s * 0.6, -s * 2.0);     // 前缘鼓到翼尖
-    quadraticVertex(-s * 0.25, -s * 1.05, s * 0.2, -s * 0.1);      // 后缘收回肩上
+    curveVertex(pts[0][0], pts[0][1]);
+    for (const [px, py] of pts) curveVertex(px, py);
+    curveVertex(pts[0][0], pts[0][1]);
+    curveVertex(pts[1][0], pts[1][1]);
     endShape(CLOSE);
     pop();
   }
@@ -587,25 +576,11 @@
     push();
     for (const c of chars) {
       if (c.state !== "bird" || c.bvis <= 0.02) continue;
-      const ang = Math.atan2(c.fvy, c.fvx);
-      const flap = Math.sin(t * (7 + c.seed % 3) + c.seed * 9);
-      push();
-      translate(c.fx, c.fy);
-      rotate(ang + Math.sin(c.seed) * 0.45 + flap * 0.18);   // 笔势倾角 + 扇翅滚转(不变形)
-      if (Math.sin(c.seed * 3) > 0) scale(1, -1); // 腹向随机,笔触不一
-      drawSwallowShape(c.scl, flap, INK, 225 * c.bvis);
-      pop();
+      drawBirdSprite(c.fx, c.fy, c.fvx, c.fvy, c.scl, c.seed, t, 225 * c.bvis);
     }
     for (const w of wilds) {
       if ((w.state !== "bird" && w.state !== "exit") || w.bvis <= 0.02) continue;
-      const ang = Math.atan2(w.fvy, w.fvx);
-      const flap = Math.sin(t * (7 + w.seed % 3) + w.seed * 9);
-      push();
-      translate(w.fx, w.fy);
-      rotate(ang + Math.sin(w.seed) * 0.45 + flap * 0.18);
-      if (Math.sin(w.seed * 3) > 0) scale(1, -1);
-      drawSwallowShape(w.scl, flap, INK, 215 * w.bvis);
-      pop();
+      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis);
     }
     pop();
   }
@@ -617,21 +592,16 @@
       const p0 = pathPos(f.keys, Math.max(0, t - 0.06));
       const p1 = pathPos(f.keys, t);
       if (!p1) continue;
-      const ang = p0 ? Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) : 0;
-      const flap = Math.sin(t * 6.5 + f.s * 3);
-      push();
-      translate(p1[0], p1[1]);
-      rotate(ang + Math.sin(f.s * 7) * 0.35 + flap * 0.18);
-      drawSwallowShape(f.s, flap, INK, 200);
-      pop();
+      drawBirdSprite(p1[0], p1[1],
+                     p0 ? (p1[0] - p0[0]) / 0.06 : 60, p0 ? (p1[1] - p0[1]) / 0.06 : 0,
+                     f.s, f.s * 3, t, 200);
     }
     pop();
   }
 
-  /* 红鲤(放大版,对齐 鲤鱼.png 设定图):鳞身 + 胸鳍/背鳍 + 鱼须 +
-     两条大飘带尾鳍;摆尾推进(冲程涌动 + 转弯侧倾) + 身后水痕 */
+  /* 红鲤:koi.png 贴图渲染(位图,非矢量形状);
+     摆尾推进(冲程涌动 + 转弯侧倾 + 贴图轻摆) + 身后水痕 */
   function drawRedCarp(t) {
-    const S = 1.5;                              // 鲤鱼整体放大
     // 水痕(尾迹渐隐)
     push();
     noFill();
@@ -642,6 +612,7 @@
       line(x0, y0, x1, y1);
     }
     pop();
+    if (!koiImg) return;
 
     const [fx, fy] = birdPos(t);
     const [vx, vy] = birdVel(t);
@@ -654,69 +625,15 @@
     // 冲程涌动:摆尾推进时身体沿泳向一冲一滑
     const surge = Math.sin(strokePh) * Math.min(3, 0.8 + speed * 0.006);
     const sx = fx + Math.cos(ang) * surge, sy = fy + Math.sin(ang) * surge;
-    const wagPh = strokePh * 1.6;
 
     push();
     translate(sx, sy);
     rotate(speed > 8 ? ang + roll + Math.sin(t * 3.2) * 0.06
                      : Math.sin(t * 1.2) * 0.1);          // 静止时轻轻摇晃
-    // —— 锦鲤造型(对齐 鲤鱼.png 设定图)——
-    const wig = Math.sin(wagPh) * (1.5 + Math.min(3, speed * 0.008));
-    // 尾鳍:两条大飘带 + 一缕中丝(向后飘,摆动与冲程同步)
-    noStroke();
-    fill(RED[0], RED[1], RED[2], 210);
-    for (const dir of [-1, 1]) {              // 上/下飘带
-      beginShape();
-      vertex(-18 * S, dir * 1.5 * S);
-      quadraticVertex(-30 * S, dir * (7 + wig) * S,
-                      -40 * S, dir * (15 + wig * 1.6) * S);   // 外缘到飘尖
-      quadraticVertex(-33 * S, dir * (9 + wig) * S, -24 * S, dir * 3.5 * S); // 内缘回
-      endShape(CLOSE);
-    }
-    fill(RED[0], RED[1], RED[2], 170);        // 中丝
-    triangle(-18 * S, -1.5 * S, -38 * S, (wig * 1.4 - 2) * S, -38 * S, (wig * 1.4 + 2) * S);
-    // 身体:弓背鱼雷形(头右尾左)
-    fill(RED[0], RED[1], RED[2], 235);
-    beginShape();
-    vertex(20 * S, 0);                                            // 吻尖
-    quadraticVertex(19 * S, -9 * S, 6 * S, -8.5 * S);             // 背前
-    quadraticVertex(-9 * S, -8 * S, -17 * S, -2.5 * S);           // 背后收窄
-    quadraticVertex(-20 * S, 0, -17 * S, 2.5 * S);                // 尾柄
-    quadraticVertex(-9 * S, 8 * S, 6 * S, 8.5 * S);               // 腹
-    quadraticVertex(19 * S, 9 * S, 20 * S, 0);                    // 颌
-    endShape(CLOSE);
-    // 鳞:成排扇贝弧(暗红细线,只画中后段)
-    noFill();
-    stroke(110, 26, 20, 80);
-    strokeWeight(1);
-    for (let ri = 0; ri < 3; ri++) {
-      const ry = (-5 + ri * 4) * S, off = (ri % 2) * 2.75 * S;
-      for (let sx = -16 * S + off; sx <= 10 * S; sx += 5.5 * S) {
-        arc(sx, ry, 5 * S, 5 * S, Math.PI * 0.55, Math.PI * 1.45);
-      }
-    }
-    noStroke();
-    // 背鳍(小)
-    fill(RED[0], RED[1], RED[2], 190);
-    triangle(-4 * S, -8 * S, 5 * S, -8 * S, 0, -12.5 * S + Math.sin(t * 4) * S);
-    // 胸鳍(一扇,轻摆)
-    fill(RED[0], RED[1], RED[2], 210);
-    const finW = Math.sin(t * 3 + 1) * 1.5;
-    beginShape();
-    vertex(4 * S, 6 * S);
-    quadraticVertex(-2 * S, (13 + finW) * S, -9 * S, (15 + finW * 1.3) * S);
-    quadraticVertex(-3 * S, 8 * S, 4 * S, 6 * S);
-    endShape(CLOSE);
-    // 眼(白圈黑瞳)与须
-    fill(245, 240, 230, 240);
-    circle(13.5 * S, -2.5 * S, 3.4 * S);
-    fill(20, 16, 12, 230);
-    circle(14 * S, -2.5 * S, 1.6 * S);
-    noFill();
-    stroke(RED[0], RED[1], RED[2], 220);
-    strokeWeight(1.2 * S);
-    bezier(19 * S, 1.5 * S, 23 * S, 3.5 * S, 25 * S, 6 * S, 24 * S, 8 * S);
-    bezier(19.5 * S, -1 * S, 23 * S, -2 * S, 24.5 * S, -3.5 * S, 24 * S, -4.5 * S);
+    rotate(Math.sin(strokePh * 1.6) * 0.06);              // 摆尾轻摆
+    imageMode(CENTER);
+    const kw = 118;                                       // 贴图宽(含尾鳍)
+    image(koiImg, 0, 0, kw, kw * koiImg.height / koiImg.width);
     pop();
   }
 
@@ -782,6 +699,8 @@
     input: { attack: 5.0, release: 1.0 },
     preload() {
       fontWrite = loadFont("/assets/fonts/mashanzheng-sub.ttf");   // p5 loadFont 只认 ttf/otf
+      birdVec = loadJSON("/assets/birds.json");   // 燕子轮廓(与 typewriter 场景同款)
+      koiImg = loadImage("/assets/koi.png");      // 红鲤贴图
     },
     build() {
       buildPaper();       // 纸纹颗粒不参与固定种子,每次略有不同更自然
