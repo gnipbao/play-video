@@ -10,10 +10,10 @@ window.WORKS = [
     id: "yanfan",
     title: "Yanfan",
     subtitle: "燕返",
-    desc: "一张横线稿纸浮在留白里,上半页写满手写信。红鲤游来,字迹化作墨燕随它盘旋出纸;燕群折返,又一只只归位,重聚成书。移动鼠标,惊起这一纸燕。",
+    desc: "一池水波如网,一封手写信浮在水里。红鲤游来,字迹化作墨鱼随它而去;绕水一匝,鱼儿又一只只归位,重聚成书。移动鼠标,搅动这一池水。",
     film: "films/yanfan.mp4",
     play: "scenes/yanfan/",
-    duration: "0:10",
+    duration: "0:12",
     year: "2026.07",
   },
   {

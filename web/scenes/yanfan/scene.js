@@ -1,59 +1,38 @@
 /* ============================================================
- * 燕返(yanfan)— 字化成燕,随红鲤一程,燕返成字
+ * 燕返(yanfan)— 字化成鱼,随红鲤一程,终归成书
  * (p5.js 程序化动画,引擎场景实现;复刻 demo/燕返.mp4)
  *
- * 一张手绘横线稿纸浮在留白里,上半页写满手写信。
- * 红鲤游来,字迹化作墨色燕群随它盘旋出纸;红鲤绕场一匝,
- * 燕群又一只只归位,重聚成书——"燕返"。
- *
- * 核心机制(可逆粒子编译器:Clock → Field → Engine → Render 分层):
- *   - 全局标量 w:hold→scatter→void→return→settle 相位机输出,
- *     全片可逆动画只认 w;粒子姿态 = lerp(原位, 飞行位, w_i),
- *     归位用插值不用物理倒放——必能精确回到同一封信
- *   - w_i = w 经每字延迟 d 的平滑窗(上行先散先回);scatter 段
- *     红鲤临近(InfluenceField 激活)可提前拉开该字的窗,边缘不规则
- *   - 燕群:多股流(红鲤尾流 + 左右两个游移涡心),同流同相位成团;
- *     造型复用打字机场景同款燕子轮廓(birds.json,扑翼姿态轮换)
- *   - 纸面液态位移:以红鲤为中心的位移场(径向推 + 切向旋),
- *     作用于横线/红线/纸边,鲤过回弹
+ * 一池水:横格般的水波纹铺满水面(网的效果),一封手写信浮在水里。
+ * 红鲤游来,字迹化作墨色小鱼随它而去;红鲤绕水一匝,
+ * 小鱼又一只只游回原位,重聚成书——"燕返"。
  *
  * 交互:
- *   - 移动鼠标:附近字迹惊散化燕(局部 w 被强制拉高),横线被拨开
- *   - 静止后,随 w 归程陆续归位变回字
- *
- * 时间轴(10s,首尾构图为无缝循环留口):
- *   0.0-0.8 hold    安静建立(字迹完整,红鲤静于左上)
- *   0.8-4.6 scatter 字化燕,自上而下漫开
- *   4.6-6.0 void    纸面最空,燕群成团在外
- *   6.0-8.8 return  燕返成字,自上而下补全
- *   8.8-10.0 settle 收尾,红鲤归隐左侧,呼应开头
+ *   - 移动鼠标搅动水面:波纹被拨开,鼠标附近的字化鱼惊散
+ *   - 静止后,小鱼陆续归位变回字
+ *   - 红鲤按自己的轨迹巡游(主角,确定性编排)
  *
  * 音效(音画同源,全部 Engine.audio.emit):
- *   stream  水流环境声(intro 编排,全程 + 燕群经过时加强)
- *   flutter 扑翼:化燕 / 归位
- *   chirp   燕鸣:燕群在外时啁啾错落
- *   pluck   红鲤拨动横线如弦
- *   brush   燕落归位、墨迹重生
- *   swish   红鲤疾掠的拨水声
+ *   brush   落笔书写(入场逐字)
+ *   blip    水泡:化鱼 / 归位
+ *   stream  水流环境声(intro 编排,全程 + 鱼群经过时加强)
  * ============================================================ */
 "use strict";
 (function () {
   const u = Engine.u;
 
   const W = 720, H = 960;
-  const BG = [242, 241, 238];
   const INK = [26, 23, 18];
   const RED = [176, 52, 39];
-  const BLUE = [116, 150, 192];      // 稿纸横线蓝
+  const BLUE = [110, 140, 175];      // 水波纹蓝
 
-  // 稿纸布局:上半页字,下半页空白横线
+  // 水面布局(原片的"网":一块矩形水面,波纹铺满)
   const PAD_X = 128, PAD_Y = 178, PAD_W = 468, PAD_H = 676;
-  const MARGIN_X = 158;              // 左侧红色竖线
-  const LINE_GAP = 30;
+  const MARGIN_X = 158;              // 红色竖线(水中的红绳)
+  const LINE_GAP = 30;               // 波纹间距
   const TEXT_X = 172;
   const CHAR_SIZE = 20;
 
-  // 信正文(上半页;节录张爱玲诀别信。字体子集只含这些字,勿增字)
+  // 信正文(按行;每行 ≤ 20 字)
   const LINES = [
     "我已经不喜欢你了,你是早已经不喜欢",
     "我的了。这次的决心,我是经过一年",
@@ -63,96 +42,67 @@
     "到尘埃里,还妄想着能从尘埃里开出",
     "花来。我以为,你是懂我的,在婚书",
     "上写下「愿岁月静好,现世安稳」,",
+    "以为就此握住了一生的幸福。",
+    "可现实终究是残酷的。你的心事,我",
+    "早已千疮百孔地领教过。挣扎倾于笔",
+    "端,于是有了《红玫瑰与白玫瑰》。",
     "那一刻,我终于明白,我们之间再也",
     "回不去了。",
+    "随信附上三十万法币,算是与你这段",
+    "感情的终结。从此以后,你不要来寻",
+    "我,即或写信来,我亦是不看的了。",
     "——张爱玲",
   ];
 
-  // 红鲤巡游关键帧(t, x, y):静于左上 → 穿纸掠字 → 左侧盘绕
-  // → 升起引导燕返 → 归隐左上(≈ 起点,留循环口)
-  const BIRD_PATH = [
-    [0.0, 152, 254], [0.55, 152, 254],
-    [1.2, 270, 285], [1.9, 410, 335], [2.6, 515, 425],
-    [3.2, 455, 545], [3.9, 320, 625], [4.6, 200, 650],
-    [5.2, 168, 555], [5.9, 178, 425], [6.6, 245, 305],
-    [7.3, 330, 275], [8.0, 305, 335], [8.7, 210, 335],
-    [9.4, 165, 290], [10.0, 152, 254],
+  // 红鲤巡游关键帧(t, x, y):从水下深处游来 → 穿信 → 绕水一匝 → 归隐
+  const FISH_PATH = [
+    [0.0, 100, 780], [1.6, 160, 700], [2.3, 300, 560], [2.9, 430, 470],
+    [3.6, 510, 330], [4.5, 420, 240], [5.4, 250, 260], [6.3, 140, 420],
+    [7.2, 160, 620], [8.2, 330, 700], [9.2, 500, 660], [10.2, 380, 760],
+    [11.2, 220, 800], [12.0, 160, 820],
   ];
 
-  /* ---------------- Clock:相位机与全片驱动标量 w ---------------- */
-  /* hold→scatter→void→return→settle;所有可逆动画只认 w,不认"倒放" */
-  const TIMELINE = { hold: 0.8, scatterEnd: 4.6, voidEnd: 6.0, returnEnd: 8.8 };
-  function clockW(t) {
-    if (t < TIMELINE.hold) return 0;
-    if (t < TIMELINE.scatterEnd) return u.ramp(TIMELINE.hold, TIMELINE.scatterEnd, t);
-    if (t < TIMELINE.voidEnd) return 1;
-    if (t < TIMELINE.returnEnd) return 1 - u.ramp(TIMELINE.voidEnd, TIMELINE.returnEnd, t);
-    return 0;
-  }
-
-  /* 自动演示轨迹(鼠标 = 惊燕):燕群巡游时搅动两下,随后离场 */
+  /* 自动演示轨迹(鼠标 = 搅水):鱼群巡游时搅动两下,随后离场 */
   const WAYPOINTS = [
-    [3.2, 320, 330], [4.0, 480, 430], [4.9, 260, 520], [5.7, 430, 390],
-    [6.6, 690, 220],
-  ];
-
-  /* 前景大燕(加强景深):少量大剪影掠过画面边缘,不落地 */
-  const FORE_PATHS = [
-    { s: 12.5, keys: [[1.2, -40, 300], [2.2, 300, 240], [3.4, 760, 420]] },
-    { s: 10.5, keys: [[2.0, 760, 600], [3.2, 380, 520], [4.6, -40, 640]] },
-    { s: 13.5, keys: [[5.6, -40, 700], [6.8, 340, 620], [8.2, 760, 540]] },
-    { s: 11.0, keys: [[6.4, 760, 180], [7.4, 420, 260], [8.8, -40, 200]] },
+    [4.2, 300, 320], [5.2, 480, 430], [6.2, 260, 520], [7.2, 430, 360],
+    [8.0, 690, 240],
   ];
 
   /* ---------------- 场景状态 ---------------- */
   let paper;
   let fontWrite;
-  let birdVec = null;        // /assets/birds.json:燕子轮廓点集(打字机同款,5 种扑翼姿态)
-  let koiImg = null;         // /assets/koi.png:红鲤贴图(透明底)
-  let chars = [];            // 字迹(⇄ 燕子,同一粒子)
-  let wilds = [];            // 野燕:片头飞入、片尾离场的散燕
-  let ripples = [];          // 横线弦:每根线的位移/速度(弹簧 + 波动传播)
-  let birdTrail = [];        // 红鲤尾迹(身后水痕)
+  let chars = [];            // 字迹(含小鱼状态)
+  let fishTrail = [];        // 红鲤尾迹(最近位置,画水痕)
+  let ripples = [];          // 波纹网:每根线的位移/速度(弹簧 + 波动传播)
   let strokePh = 0;          // 红鲤摆尾冲程相位
-  let prevIy = null;         // 鼠标上一帧 y(算触线速度)
+  let prevStroke = 0;
+  let prevIy = null;         // 鼠标上一帧 y(算触网速度)
   let chirpTimer = 2.0;
-  let swishCool = 0;
-  let chirpA = false, chirpB = false;
+  let blipCool = 0;
 
-  // 横线网格参数
+  // 波纹网参数
   const RL_X0 = PAD_X + 8, RL_DX = 12;
   const RL_NX = Math.floor((PAD_W - 16) / RL_DX) + 1;
   const RL_NL = Math.floor((PAD_H - 24) / LINE_GAP) + 1;
 
   /* ---------------- 红鲤 ---------------- */
-  function birdPos(t) {
-    const P = BIRD_PATH;
+  function fishPos(t) {
+    const P = FISH_PATH;
     if (t <= P[0][0]) return [P[0][1], P[0][2]];
     let i = 0;
     while (i < P.length - 2 && t > P[i + 1][0]) i++;
     const [t0, x0, y0] = P[i], [t1, x1, y1] = P[i + 1];
     const p = u.ramp(t0, t1, t);
-    // 飞行中的游移;栖息时近乎静止
-    const rest = (t < 0.55 || t > 9.4) ? 0.15 : 1;
+    // 游动时的蛇形摆动
     return [
-      u.mix(x0, x1, p) + (noise(300, t * 0.6) - 0.5) * 26 * rest,
-      u.mix(y0, y1, p) + (noise(350, t * 0.6) - 0.5) * 20 * rest,
+      u.mix(x0, x1, p) + (noise(300, t * 0.6) - 0.5) * 30,
+      u.mix(y0, y1, p) + (noise(350, t * 0.6) - 0.5) * 24,
     ];
   }
-  function birdVel(t) {
-    const [x0, y0] = birdPos(Math.max(0, t - 0.05));
-    const [x1, y1] = birdPos(t);
+  function fishVel(t) {
+    const [x0, y0] = fishPos(Math.max(0, t - 0.05));
+    const [x1, y1] = fishPos(t);
     return [(x1 - x0) / 0.05, (y1 - y0) / 0.05];
-  }
-
-  /* 任意关键帧路径插值(前景大燕用) */
-  function pathPos(keys, t) {
-    if (t <= keys[0][0] || t >= keys[keys.length - 1][0]) return null;
-    let i = 0;
-    while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
-    const [t0, x0, y0] = keys[i], [t1, x1, y1] = keys[i + 1];
-    const p = u.ramp(t0, t1, t);
-    return [u.mix(x0, x1, p), u.mix(y0, y1, p)];
   }
 
   /* ---------------- 构建(固定种子) ---------------- */
@@ -160,99 +110,72 @@
     randomSeed(20240721);
     noiseSeed(31);
     chars = [];
-    const lastLi = LINES.length - 1;
+    let idx = 0;
     for (let li = 0; li < LINES.length; li++) {
       const line = LINES[li];
       const y = PAD_Y + 62 + li * LINE_GAP;
-      const row = li / lastLi;                 // 0=最上行 1=最下行
       const indent = line.startsWith("——") ? 220
-        : (li === 0 || "曾那".includes(line[0])) ? 24 : 0;
+        : (li === 0 || "曾可随".includes(line[0])) ? 24 : 0;
       for (let ci = 0; ci < line.length; ci++) {
         const ch = line[ci];
         const x = TEXT_X + indent + ci * CHAR_SIZE + CHAR_SIZE / 2;
-        const stream = Math.floor(random(3));   // 隶属哪股燕流
         chars.push({
-          ch, x, y,                            // origin:信的真相源
+          ch, x, y,
           rot: (random() - 0.5) * 0.06,
-          d: row * 0.7 + random(0.3),          // 归一化延迟(上行小:先散先回)
-          wi: 0, prevWi: 0,                    // 当前/上帧 w_i(粒子权重)
-          fx: x, fy: y, fvx: 0, fvy: 0,        // 飞行位(在外时群飞积分)
-          px: x, py: y, ppx: x, ppy: y,        // 渲染位 = lerp(origin, 飞行位, w_i)
-          hvx: 0, hvy: 0,                      // 渲染位速度(朝向用)
+          writeT: 0.15 + idx * 0.0052,
+          // 化鱼时间波:红鲤游过之后,自上而下化开(原片 1s 起 2.5s 化尽)
+          waveT: 1.9 + (y - PAD_Y) / PAD_H * 1.4,
+          state: "ink", vis: 0,
+          fx: 0, fy: 0, fvx: 0, fvy: 0,
           seed: random(1000),
-          stream,
-          ring: 60 + random(170),               // 环绕半径(散开,像燕群而非球)
-          // 相位量化到 4 团、转向同流一致:成群成带地飞(椋鸟群结构)
-          ringA: Math.floor(random(4)) * (Math.PI / 2) + random(0.7),
-          ringW: (0.7 + random(0.5)) * [1, -1, 1][stream],
-          scl: pickScale(random()),
+          ring: 70 + random(150),          // 跟随红鲤的环绕半径(散开,像鱼群而非球)
+          ringA: random(Math.PI * 2),      // 环绕初相
+          ringW: 0.7 + random(0.8),        // 环绕角速度
+          threshold: 0.4 + random(0.25),
+          retT: 6.8 + random(1.0),         // 归队时刻(燕返有先有后)
         });
+        idx++;
       }
     }
-    wilds = [];
-    for (let i = 0; i < 42; i++) {
-      const fromLeft = random() < 0.6;
-      const stream = Math.floor(random(3));
-      wilds.push({
-        state: "out",
-        enterT: 0.5 + random(1.1),
-        exitT: 8.2 + random(1.3),
-        sx: fromLeft ? -30 : 100 + random(400),   // 入场点(左上/上方画外)
-        sy: fromLeft ? 120 + random(400) : -30,
-        ex: W + 40, ey: 200 + random(500),        // 离场点(右侧画外)
-        fx: 0, fy: 0, fvx: 0, fvy: 0,
-        seed: random(1000),
-        stream,
-        ring: 60 + random(170),
-        ringA: Math.floor(random(4)) * (Math.PI / 2) + random(0.7),
-        ringW: (0.7 + random(0.5)) * [1, -1, 1][stream],
-        scl: pickScale(random()),
-        bvis: 0,
-      });
-    }
+    fishTrail = [];
     ripples = [];
     for (let k = 0; k < RL_NL; k++) {
       ripples.push({ o: new Array(RL_NX).fill(0), v: new Array(RL_NX).fill(0), cool: 0 });
     }
-    birdTrail = [];
-    strokePh = 0;
-    prevIy = null;
+    strokePh = 0; prevStroke = 0; prevIy = null;
     chirpTimer = 2.0;
-    swishCool = 0;
-    chirpA = chirpB = false;
-  }
-
-  /* 燕子尺度:远处墨点、中景短弧、近处展翅 */
-  function pickScale(r) {
-    if (r < 0.30) return 1.2 + r * 3.3;          // 1.2–2.2 墨点
-    if (r < 0.75) return 2.6 + (r - 0.30) * 4.0; // 2.6–4.4 短弧
-    return 5.0 + (r - 0.75) * 10.0;              // 5.0–7.5 展翅
+    blipCool = 0;
   }
 
   function buildPaper() {
     paper = createGraphics(W, H);
-    paper.background(BG[0], BG[1], BG[2]);
+    paper.background(240, 236, 224);
     paper.noStroke();
-    for (let i = 0; i < 1800; i++) {
-      const g = 215 + Math.random() * 40;
-      paper.fill(g, g, g - 4, 10);
+    for (let i = 0; i < 2000; i++) {
+      const g = 208 + Math.random() * 48;
+      paper.fill(g, g - 8, g - 26, 12);
       paper.circle(Math.random() * W, Math.random() * H, 1 + Math.random() * 1.5);
     }
-    // 悬浮稿纸:柔和投影 + 纸面(边缘由 drawPaperEdge 活画,便于液态拉扯)
-    const ctx = paper.drawingContext;
-    ctx.shadowColor = "rgba(30,26,20,0.13)";
-    ctx.shadowBlur = 22;
-    ctx.shadowOffsetY = 8;
-    paper.fill(250, 249, 244);
-    paper.rect(PAD_X, PAD_Y, PAD_W, PAD_H, 2);
-    ctx.shadowColor = "rgba(0,0,0,0)";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
+    // 水面(略亮,细边)——水的"容器"
+    paper.fill(244, 243, 236, 200);
+    paper.stroke(175, 178, 168, 80);
+    paper.strokeWeight(1);
+    paper.rect(PAD_X, PAD_Y, PAD_W, PAD_H, 3);
   }
 
-  /* ---------------- 状态机(w 驱动,见 sceneUpdate) ---------------- */
+  /* ---------------- 状态机 ---------------- */
+  function toFish(c, t, strong) {
+    c.state = "fish";
+    c.fx = c.x; c.fy = c.y;
+    const away = Math.atan2(c.y - fishPos(t)[1], c.x - fishPos(t)[0])
+               + (noise(c.seed, 7) - 0.5) * 1.8;
+    const v = strong ? 130 + noise(c.seed, 3) * 120 : 90;
+    c.fvx = Math.cos(away) * v;
+    c.fvy = Math.sin(away) * v - 30;
+    Engine.audio.emit("blip", { freq: 300 + noise(c.seed, 9) * 260, gain: 0.045 });
+  }
 
-  /* 触线:位移脉冲打进最近的横线点,沿弦传播;大速度附带一声弦响 */
+  /* 触网:位移脉冲打进最近的网线点,沿网传播;大速度附带一声网弦轻响 */
   function rippleTouch(x, y, vy) {
     const k = Math.round((y - (PAD_Y + 32)) / LINE_GAP);
     if (k < 0 || k >= ripples.length) return;
@@ -260,7 +183,7 @@
     const i = Math.round((x - RL_X0) / RL_DX);
     if (i < 1 || i >= r.o.length - 1) return;
     r.v[i] += vy * 0.3;
-    if (r.cool <= 0 && Math.abs(vy) > 150) {
+    if (r.cool <= 0 && Math.abs(vy) > 130) {
       r.cool = 0.4;
       Engine.audio.emit("pluck", {
         freq: u.noteFreq([0, 3, 5, 7, 10][k % 5] - 12),
@@ -283,223 +206,144 @@
     }
   }
 
-  /* 游移涡心:左一股、右一股(部分时间在画外,燕群得以进出画) */
-  function streamCenter(s, t) {
-    if (s === 1) return [105 + 95 * Math.cos(t * 0.5 + 2.0), 500 + 255 * Math.sin(t * 0.5 + 2.0)];
-    return [615 + 125 * Math.cos(-t * 0.42 + 0.7), 330 + 215 * Math.sin(-t * 0.42 + 0.7)];
-  }
-
-  /* 燕群飞行:同流同相位的燕团绕涡心滑行(团+带结构),噪声收小,
-     速度放开到 420 有穿梭感;鼠标搅动时燕群避让 */
-  function flockFly(p, dt, t, input) {
-    const c = p.stream === 0 ? birdPos(t) : streamCenter(p.stream, t);
-    const ang = p.ringA + t * p.ringW;
-    // 半径呼吸同流同相(整团一起胀缩,不散成晕)
-    const rr = p.ring * (0.75 + 0.25 * Math.sin(t * 0.7 + p.stream * 2.1));
-    const gx = c[0] + Math.cos(ang) * rr;
-    const gy = c[1] + Math.sin(ang) * rr * 0.78;
-    p.fvx += ((gx - p.fx) * 2.6 + (noise(p.seed, t * 1.1) - 0.5) * 320) * dt;
-    p.fvy += ((gy - p.fy) * 2.6 + (noise(p.seed + 40, t * 1.1) - 0.5) * 320) * dt;
-    if (input.active && input.D > 0.05) {   // 鼠标搅动:燕群避让
-      const dm = Math.hypot(p.fx - input.x, p.fy - input.y);
-      const g = u.gauss(dm, 90) * input.D;
-      p.fvx += (p.fx - input.x) / (dm + 1e-3) * 900 * g * dt;
-      p.fvy += (p.fy - input.y) / (dm + 1e-3) * 900 * g * dt;
-    }
-    p.fvx *= (1 - 2.0 * dt); p.fvy *= (1 - 2.0 * dt);
-    capSpeed(p, 420);
-    p.fx += p.fvx * dt; p.fy += p.fvy * dt;
-    p.bvis = Math.min(1, p.bvis + dt * 5);
-  }
-
-  function flyTo(p, tx, ty, k, dampNear, dampFar, dt) {
-    p.fvx += (tx - p.fx) * k * dt;
-    p.fvy += (ty - p.fy) * k * dt;
-    const d = Math.hypot(tx - p.fx, ty - p.fy);
-    const damp = d < 70 ? dampNear : dampFar;
-    p.fvx *= (1 - damp * dt); p.fvy *= (1 - damp * dt);
-    capSpeed(p, 340);
-    p.fx += p.fvx * dt; p.fy += p.fvy * dt;
-    return d;
-  }
-
-  function capSpeed(p, max) {
-    const sp = Math.hypot(p.fvx, p.fvy);
-    if (sp > max) { p.fvx *= max / sp; p.fvy *= max / sp; }
-  }
-
   function sceneUpdate(dt, t, input) {
-    const [bx, by] = birdPos(t);
-    const [bvx, bvy] = birdVel(t);
-    const birdSpeed = Math.hypot(bvx, bvy);
-    // 尾迹(运动模糊用)
-    birdTrail.push([bx, by, Math.atan2(bvy, bvx)]);
-    if (birdTrail.length > 14) birdTrail.shift();
+    const [fx, fy] = fishPos(t);
+    const [fvx0, fvy0] = fishVel(t);
+    const fishSpeed = Math.hypot(fvx0, fvy0);
+    // 尾迹
+    fishTrail.push([fx, fy]);
+    if (fishTrail.length > 90) fishTrail.shift();
 
-    // 片头两声远远的燕鸣(现场/渲染双端一致,故走 update 而非 intro 调度)
-    if (!chirpA && t > 0.8) { chirpA = true; Engine.audio.emit("chirp", { gain: 0.035, pitch: 1.06 }); }
-    if (!chirpB && t > 1.5) { chirpB = true; Engine.audio.emit("chirp", { gain: 0.03, pitch: 0.94 }); }
-
-    // 摆尾冲程:频率随速度;疾掠时一声拨水(限流)
-    strokePh += dt * Math.PI * 2 * (0.7 + birdSpeed / 260);
-    swishCool -= dt;
-    if (swishCool <= 0 && birdSpeed > 200) {
-      swishCool = 0.9;
+    // 摆尾冲程:频率随速度;冲程顶点一声拨水
+    strokePh += dt * Math.PI * 2 * (0.7 + fishSpeed / 260);
+    const strokeNow = Math.sin(strokePh);
+    if (prevStroke < 0 && strokeNow >= 0 && fishSpeed > 60) {
       Engine.audio.emit("swish", {
-        gain: Math.min(0.05, 0.02 + birdSpeed * 0.00006),
-        pitch: 0.85 + birdSpeed / 1600,
+        gain: Math.min(0.05, 0.02 + fishSpeed * 0.00006),
+        pitch: 0.85 + fishSpeed / 1600,
       });
     }
+    prevStroke = strokeNow;
 
-    // 线:红鲤与鼠标碰触;鸟群抽样压线;波动传播
-    rippleTouch(bx, by, bvy);
+    // 网:红鲤与鼠标碰触;波动传播
+    rippleTouch(fx, fy, fvy0);
     if (input.active) {
       if (prevIy !== null) rippleTouch(input.x, input.y, (input.y - prevIy) / Math.max(dt, 1e-3) * 0.6);
       prevIy = input.y;
     } else prevIy = null;
-    for (let i = 0; i < chars.length; i += 9) {
-      const c = chars[i];
-      if (c.wi > 0.5) rippleTouch(c.fx, c.fy, c.fvy * 0.4);
-    }
     rippleStep(dt);
 
-    /* --- 字迹粒子(ParticleEngine:w_i 驱动的可逆插值) --- */
-    const w = clockW(t);
-    const phase = w <= 0 ? (t < TIMELINE.hold ? "hold" : "settle")
-      : w >= 1 ? "void" : (t < TIMELINE.voidEnd ? "scatter" : "return");
     for (const c of chars) {
-      // w_i:w 经每字延迟 d 的平滑窗;scatter 段红鲤临近(Field 激活)提前拉开
-      const dEff = (phase === "scatter"
-        && Math.hypot(c.x - bx, c.y - by) < 115) ? 0 : c.d;
-      const g0 = u.clamp01((w - dEff * 0.3) / 0.7);
-      let wi = g0 * g0 * (3 - 2 * g0);
-      // 鼠标惊散:局部 w 被强制拉高(松手后随全局 w 归程)
-      const fear = input.D * u.gauss(Math.hypot(c.x - input.x, c.y - input.y), 85);
-      wi = Math.max(wi, Math.min(1, fear * 1.6));
-      // 过阈沿音效:化燕 flutter / 归位 brush(稀疏)
-      if (c.prevWi < 0.5 && wi >= 0.5) {
-        Engine.audio.emit("flutter", { gain: 0.05, pitch: 0.9 + noise(c.seed, 5) * 0.3 });
-      } else if (c.prevWi >= 0.5 && wi < 0.5 && noise(c.seed, 13) < 0.3) {
-        Engine.audio.emit("brush", { gain: 0.035, pitch: 0.85 + noise(c.seed, 11) * 0.4 });
-      }
-      c.prevWi = wi;
-      c.wi = wi;
-      if (wi > 0.003) flockFly(c, dt, t, input);   // 在外:群飞积分(活体感)
-      // 可逆插值:w_i→1 完全随群,w_i→0 精确归位(无倒放、无过冲)
-      const px = u.mix(c.x, c.fx, wi), py = u.mix(c.y, c.fy, wi);
-      c.hvx = (px - c.ppx) / Math.max(dt, 1e-3);
-      c.hvy = (py - c.ppy) / Math.max(dt, 1e-3);
-      c.ppx = px; c.ppy = py;
-      c.px = px; c.py = py;
-    }
-
-    /* --- 野燕:片头飞入,片尾离场 --- */
-    for (const w of wilds) {
-      if (w.state === "out") {
-        if (t > w.enterT) {
-          w.state = "bird";
-          w.fx = w.sx; w.fy = w.sy;
-          w.fvx = (W / 2 - w.sx) * 0.5; w.fvy = (H / 2 - w.sy) * 0.4;
+      const wantVis = u.ramp(c.writeT, c.writeT + 0.35, t);
+      if (c.state === "ink") {
+        c.vis += (wantVis - c.vis) * Math.min(1, dt * 8);
+        if (c.vis < 0.8) continue;
+        const dFish = Math.hypot(c.x - fx, c.y - fy);
+        const dMouse = Math.hypot(c.x - input.x, c.y - input.y);
+        const fear = input.D * u.gauss(dMouse, 85);
+        // 化鱼:鼠标搅动(随时) / 红鲤游到跟前、时间波抵达(仅前 7.2s,
+        // 之后进入燕返阶段,归位的字不再被时间波反复化开)
+        if (fear > c.threshold
+            || (t < 7.2 && (dFish < 92 || t > c.waveT))) {
+          toFish(c, t, dFish < 92);
         }
-      } else if (w.state === "bird") {
-        if (t < w.exitT) flockFly(w, dt, t, input);
-        else w.state = "exit";
-      } else if (w.state === "exit") {
-        flyTo(w, w.ex, w.ey, 5.0, 1.2, 1.2, dt);
-        if (w.fx > W + 30) w.state = "gone";
+      } else {
+        c.vis = Math.max(0, c.vis - dt * 4);
+        if (t < c.retT) {
+          // 跟随红鲤:缀在鱼身后,环绕半径呼吸般起伏 + 噪声游荡 + 水阻
+          const ang = c.ringA + t * c.ringW;
+          const rr = c.ring * (0.72 + 0.28 * Math.sin(t * 0.8 + c.seed));
+          const gx = fx + Math.cos(ang) * rr - fvx0 * 0.35;
+          const gy = fy + Math.sin(ang) * rr * 0.72 - fvy0 * 0.35;
+          c.fvx += ((gx - c.fx) * 2.2 + (noise(c.seed, t * 1.1) - 0.5) * 700) * dt;
+          c.fvy += ((gy - c.fy) * 2.2 + (noise(c.seed + 40, t * 1.1) - 0.5) * 700) * dt;
+          c.fvx *= (1 - 2.0 * dt); c.fvy *= (1 - 2.0 * dt);
+        } else {
+          // 燕返:游回家(越晚归队越慢;近家强阻尼,到家即稳)
+          const late = Math.min(1, (c.retT - 6.8) / 1.0);
+          const k = 7.0 - late * 3.0;
+          c.fvx += (c.x - c.fx) * k * dt;
+          c.fvy += (c.y - c.fy) * k * dt;
+          const dHome = Math.hypot(c.x - c.fx, c.y - c.fy);
+          const damp = dHome < 70 ? 6.0 : 3.2;   // 近家强阻尼,防过冲振荡
+          c.fvx *= (1 - damp * dt); c.fvy *= (1 - damp * dt);
+          const near = dHome < 14 && Math.hypot(c.fvx, c.fvy) < 120;
+          if (near || t > c.retT + 1.6) {   // 兜底:到点强制归位
+            c.state = "ink";
+            c.vis = 0.45;
+            if (noise(c.seed, 13) < 0.3) {   // 归位水泡稀疏化
+              Engine.audio.emit("blip", { freq: 500 + noise(c.seed, 11) * 300, gain: 0.035 });
+            }
+          }
+        }
+        const sp = Math.hypot(c.fvx, c.fvy);
+        if (sp > 300) { c.fvx *= 300 / sp; c.fvy *= 300 / sp; }
+        c.fx += c.fvx * dt; c.fy += c.fvy * dt;
       }
     }
 
-    // 燕鸣:燕群在外时啁啾错落
-    let airborne = 0;
-    for (const c of chars) if (c.wi > 0.5) airborne++;
-    for (const w of wilds) if (w.state === "bird" || w.state === "exit") airborne++;
-    if (airborne > 50) {
+    // 燕鸣:鱼群(墨燕)在外时啁啾错落
+    const swimming0 = chars.reduce((n, c) => n + (c.state === "fish" ? 1 : 0), 0);
+    if (swimming0 > 40) {
       chirpTimer -= dt;
       if (chirpTimer <= 0) {
-        chirpTimer = 0.8 + noise(t * 7.3) * 1.2;
-        Engine.audio.emit("chirp", { gain: 0.04, pitch: 0.92 + noise(t * 3.1) * 0.25 });
+        chirpTimer = 0.7 + noise(t * 7.3) * 1.1;
+        Engine.audio.emit("chirp", { gain: 0.045, pitch: 0.92 + noise(t * 3.1) * 0.25 });
       }
     }
 
-    Engine.audio.setShimmer(Math.min(1, airborne / 120) * 0.03 + input.D * 0.012);
-  }
-
-  /* ---------------- 液态位移场 ---------------- */
-  /* 以红鲤为中心的位移:径向推开 + 切向旋卷,随速度增强,首尾安静;
-     鼠标搅动也有局部推挤。横线/红线/纸边共用。 */
-  function liquify(x, y, t) {
-    const [bx, by] = birdPos(t);
-    const [vx, vy] = birdVel(t);
-    const sp = Math.hypot(vx, vy);
-    const amp = u.ramp(0.6, 1.2, t) * (1 - u.ramp(9.0, 9.8, t)) * Math.min(1, sp / 200);
-    const d = Math.hypot(x - bx, y - by);
-    const g = u.gauss(d, 105) * amp;
-    const rx = (x - bx) / (d + 1e-3), ry = (y - by) / (d + 1e-3);
-    let dx = (rx * 26 - ry * 15) * g + vx * 0.035 * g;
-    let dy = (ry * 26 + rx * 15) * g + vy * 0.035 * g;
-    if (Engine.input.active && Engine.input.D > 0.05) {
-      const m = Engine.input;
-      const dm = Math.hypot(x - m.x, y - m.y);
-      const gm = u.gauss(dm, 80) * m.D;
-      dx += (x - m.x) / (dm + 1e-3) * 16 * gm;
-      dy += (y - m.y) / (dm + 1e-3) * 16 * gm;
+    // 鱼群经过的水泡声(限流)
+    blipCool -= dt;
+    if (blipCool <= 0) {
+      blipCool = 0.5;
+      let n = 0;
+      for (const c of chars) if (c.state === "fish") n++;
+      if (n > 30) {
+        Engine.audio.emit("blip", { freq: 240 + noise(t * 3.7) * 160, gain: 0.03 });
+      }
     }
-    return [dx, dy];
+
+    const swimming = chars.reduce((n, c) => n + (c.state === "fish" ? 1 : 0), 0);
+    Engine.audio.setShimmer(Math.min(1, swimming / 90) * 0.035 + input.D * 0.015);
   }
 
   /* ---------------- 绘制 ---------------- */
-  // 横线稿:手绘感横线,带触弦振动 + 红鲤液态位移;左侧红色竖线同场
-  function drawLines(t) {
+  // 水波纹:手绘感横线,随时间漂移;带触网振动(位移沿网传播);
+  // 红鲤与鼠标经过处被拨开(网的效果)
+  function drawRipples(t) {
+    const [fx, fy] = fishPos(t);
+    const mx = Engine.input.x, my = Engine.input.y;
+    const mOn = Engine.input.active;
     push();
     noFill();
     strokeWeight(1);
     for (let k = 0; k < ripples.length; k++) {
       const y0 = PAD_Y + 32 + k * LINE_GAP;
       const r = ripples[k];
-      stroke(BLUE[0], BLUE[1], BLUE[2], 100);
+      stroke(BLUE[0], BLUE[1], BLUE[2], 105);
       beginShape();
       for (let i = 0; i < r.o.length; i++) {
         const x = RL_X0 + i * RL_DX;
-        const lq = liquify(x, y0, t);
-        const y = y0 + Math.sin(x * 0.045 + k * 2.1 + t * 0.8) * 1.6 + r.o[i] + lq[1];
-        curveVertex(x + lq[0] * 0.7, y);
+        let y = y0 + Math.sin(x * 0.045 + k * 2.1 + t * 0.9) * 1.8 + r.o[i];
+        // 红鲤拨开波纹
+        const dF = Math.hypot(x - fx, y0 - fy);
+        y += (y0 > fy ? 1 : -1) * 16 * u.gauss(dF, 52);
+        // 鼠标搅动
+        if (mOn) {
+          const dM = Math.hypot(x - mx, y0 - my);
+          y += (y0 > my ? 1 : -1) * 14 * u.gauss(dM, 46) * Engine.input.D;
+        }
+        curveVertex(x, y);
       }
       endShape();
     }
-    // 左侧红色竖线(同一位移场)
-    stroke(RED[0], RED[1], RED[2], 120);
+    // 红色竖线(水中红绳,随波轻摆)
+    stroke(RED[0], RED[1], RED[2], 130);
     beginShape();
-    for (let y = PAD_Y + 10; y <= PAD_Y + PAD_H - 10; y += 14) {
-      const lq = liquify(MARGIN_X, y, t);
-      curveVertex(MARGIN_X + Math.sin(y * 0.05 + t * 0.6) * 2 + lq[0] * 0.8, y + lq[1] * 0.8);
+    for (let y = PAD_Y + 8; y <= PAD_Y + PAD_H - 8; y += 14) {
+      curveVertex(MARGIN_X + Math.sin(y * 0.05 + t * 0.7) * 2, y);
     }
     endShape();
-    pop();
-  }
-
-  /* 纸边:手绘抖动 + 呼吸起伏 + 红鲤附近的液态拉扯(活画,不烘焙) */
-  function drawPaperEdge(t) {
-    const cx = PAD_X + PAD_W / 2, cy = PAD_Y + PAD_H / 2;
-    push();
-    noFill();
-    stroke(172, 174, 164, 130);
-    strokeWeight(1);
-    beginShape();
-    const pts = [];
-    const step = 22;
-    for (let x = PAD_X; x <= PAD_X + PAD_W; x += step) pts.push([x, PAD_Y]);
-    for (let y = PAD_Y + step; y <= PAD_Y + PAD_H; y += step) pts.push([PAD_X + PAD_W, y]);
-    for (let x = PAD_X + PAD_W - step; x >= PAD_X; x -= step) pts.push([x, PAD_Y + PAD_H]);
-    for (let y = PAD_Y + PAD_H - step; y >= PAD_Y + step; y -= step) pts.push([PAD_X, y]);
-    for (const [px, py] of pts) {
-      const dc = Math.hypot(px - cx, py - cy);
-      const nx = (px - cx) / dc, ny = (py - cy) / dc;
-      const wob = (noise(px * 0.02, py * 0.02, t * 0.25) - 0.5) * 3.4;
-      const lq = liquify(px, py, t);
-      curveVertex(px + nx * wob + lq[0] * 0.7, py + ny * wob + lq[1] * 0.7);
-    }
-    endShape(CLOSE);
     pop();
   }
 
@@ -509,153 +353,103 @@
     textFont(fontWrite);
     textSize(19);
     for (const c of chars) {
-      const inkA = 1 - u.ramp(0.15, 0.6, c.wi);   // 墨迹量:随 w_i 消散/重聚
-      if (inkA <= 0.01) continue;
+      if (c.vis <= 0.01 || c.state !== "ink") continue;
       push();
-      if (c.wi > 0.05 && c.wi < 0.6) {
-        // 碎裂带:笔画被啄散/重凝的一瞬间(抖动 + 闪烁,边缘不规则)
-        translate(c.x + (noise(c.seed, t * 36) - 0.5) * 5,
-                  c.y + (noise(c.seed + 3, t * 36) - 0.5) * 5);
-        rotate(c.rot + (noise(c.seed + 9, t * 30) - 0.5) * 0.1);
-        fill(INK[0], INK[1], INK[2],
-             235 * inkA * (0.5 + 0.5 * noise(c.seed + 7, t * 30)));
-      } else {
-        translate(c.x, c.y);
-        rotate(c.rot);
-        scale(0.55 + 0.45 * u.easeOutCubic(inkA));   // 归位:燕影缩成笔画
-        fill(INK[0], INK[1], INK[2], 235 * inkA);
-      }
+      translate(c.x, c.y + Math.sin(t * 0.8 + c.seed) * 0.7);
+      rotate(c.rot + Math.sin(t * 0.5 + c.seed) * 0.01);   // 字里带着水意
+      fill(INK[0], INK[1], INK[2], 235 * Math.min(1, c.vis));
       text(c.ch, 0, 0);
       pop();
     }
     pop();
   }
 
-  /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
-     只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);远处只是小墨点。
-     朝向完全跟随飞行方向(最早的轨迹姿态),左飞水平翻转保持正立,不翻滚 */
-  const POSES = [2, 4, 5];
-  function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha) {
-    if (s < 2.4 || !birdVec) {                  // 远:一个墨点
-      noStroke();
-      fill(INK[0], INK[1], INK[2], alpha);
-      circle(x, y, s * 1.8);
-      return;
-    }
-    const sp = Math.hypot(vx, vy);
-    const pose = POSES[Math.floor(t * (6 + sp / 60) + seed * 7) % POSES.length];
-    const spec = birdVec["bird" + pose];
-    if (!spec) return;
-    const heading = Math.atan2(vy, vx);
+  /* 墨鱼:逗号形小蝌蚪,随泳向摆尾 */
+  function drawInkFish(t) {
     push();
-    translate(x, y);
-    rotate(heading);                              // 机头朝飞行方向
-    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞翻转,保持正立不翻滚
-    scale(s * 0.075);
-    translate(-spec.w / 2, -spec.h / 2);
     noStroke();
-    fill(INK[0], INK[1], INK[2], alpha);
-    const pts = spec.pts;
-    beginShape();
-    curveVertex(pts[0][0], pts[0][1]);
-    for (const [px, py] of pts) curveVertex(px, py);
-    curveVertex(pts[0][0], pts[0][1]);
-    curveVertex(pts[1][0], pts[1][1]);
-    endShape(CLOSE);
-    pop();
-  }
-
-  function drawInkBirds(t) {
-    push();
     for (const c of chars) {
-      const birdA = u.ramp(0.25, 0.7, c.wi);      // 燕形量:随 w_i 聚散
-      if (birdA <= 0.02) continue;
-      drawBirdSprite(c.px, c.py, c.hvx, c.hvy, c.scl, c.seed, t, 225 * birdA);
-    }
-    for (const w of wilds) {
-      if ((w.state !== "bird" && w.state !== "exit") || w.bvis <= 0.02) continue;
-      drawBirdSprite(w.fx, w.fy, w.fvx, w.fvy, w.scl, w.seed, t, 215 * w.bvis);
-    }
-    pop();
-  }
-
-  /* 前景大燕:越过画面边缘,加强景深(无摄影虚化) */
-  function drawForeBirds(t) {
-    push();
-    for (const f of FORE_PATHS) {
-      const p0 = pathPos(f.keys, Math.max(0, t - 0.06));
-      const p1 = pathPos(f.keys, t);
-      if (!p1) continue;
-      drawBirdSprite(p1[0], p1[1],
-                     p0 ? (p1[0] - p0[0]) / 0.06 : 60, p0 ? (p1[1] - p0[1]) / 0.06 : 0,
-                     f.s, f.s * 3, t, 200);
-    }
-    pop();
-  }
-
-  /* 红鲤:koi.png 贴图 + 脊椎条带波浪(游戏式游动)——贴图切成竖条,
-     每条按从头向尾传播的行波横向错动,身体如真鱼般扭动;
-     叠加冲程涌动、转弯侧倾与身后水痕 */
-  function drawRedCarp(t) {
-    // 水痕(尾迹渐隐)
-    push();
-    noFill();
-    strokeWeight(1.2);
-    for (let i = 1; i < birdTrail.length; i++) {
-      const [x0, y0] = birdTrail[i - 1], [x1, y1] = birdTrail[i];
-      stroke(RED[0], RED[1], RED[2], 26 * (i / birdTrail.length));
-      line(x0, y0, x1, y1);
-    }
-    pop();
-    if (!koiImg) return;
-
-    const [fx, fy] = birdPos(t);
-    const [vx, vy] = birdVel(t);
-    const speed = Math.hypot(vx, vy);
-    const ang = Math.atan2(vy, vx);
-    // 转弯侧倾:朝向变化率 → 身体侧滚
-    const [pvx, pvy] = birdVel(Math.max(0, t - 0.12));
-    const turn = (Math.atan2(vy, vx) - Math.atan2(pvy, pvx)) / 0.12;
-    const roll = Math.max(-0.35, Math.min(0.35, turn * 0.18));
-    // 冲程涌动:摆尾推进时身体沿泳向一冲一滑
-    const surge = Math.sin(strokePh) * Math.min(3, 0.8 + speed * 0.006);
-    const sx = fx + Math.cos(ang) * surge, sy = fy + Math.sin(ang) * surge;
-
-    push();
-    translate(sx, sy);
-    rotate(speed > 8 ? ang + roll : Math.sin(t * 1.2) * 0.1);   // 静止时轻轻摇晃
-    // 骨骼链波浪:先算脊椎曲线上每节的点位,再逐节按切线角摆放贴图条带
-    // (条带随关节旋转而非上下错动,关节连续,游动丝滑);
-    // 静止时小幅怠速摆动,游动时波幅随速度
-    const amp = 1.6 + Math.min(6.5, speed * 0.022);
-    const KW = 118, KH = KW * koiImg.height / koiImg.width;
-    const N = 30, dw = KW / N, sw = koiImg.width / N;
-    const spine = [];
-    for (let i = 0; i < N; i++) {
-      const f0 = (i + 0.5) / N;                          // 0=尾鳍端 1=头端
-      const envelope = 0.15 + 0.85 * Math.pow(1 - f0, 1.2);   // 波幅向尾部递增
-      spine.push([
-        -KW / 2 + f0 * KW,
-        Math.sin(strokePh * 1.6 - f0 * 3.0) * amp * envelope,
-      ]);
-    }
-    imageMode(CENTER);
-    for (let i = 0; i < N; i++) {
-      const [x, y] = spine[i];
-      const [xa, ya] = spine[Math.max(0, i - 1)];
-      const [xb, yb] = spine[Math.min(N - 1, i + 1)];
+      if (c.state !== "fish") continue;
+      const alpha = 1 - c.vis;
+      if (alpha <= 0.02) continue;
+      const ang = Math.atan2(c.fvy, c.fvx);
+      const wob = Math.sin(t * 9 + c.seed * 8) * 0.35;
       push();
-      translate(x, y);
-      rotate(Math.atan2(yb - ya, xb - xa));              // 局部切线角
-      image(koiImg, 0, 0, dw + 0.8, KH,
-            Math.floor(i * sw), 0, Math.ceil(sw), koiImg.height);
+      translate(c.fx, c.fy);
+      rotate(ang);
+      fill(INK[0], INK[1], INK[2], 225 * alpha);
+      // 头(椭圆) + 摆动的尾(三角)
+      ellipse(0, 0, 10, 6);
+      const tw = Math.sin(t * 11 + c.seed * 9) * 4;
+      triangle(-4, 0, -14, tw * 0.4 - 3, -14, tw * 0.4 + 3);
       pop();
     }
     pop();
   }
 
+  /* 红鲤:摆尾推进(冲程涌动 + 转弯侧倾) + 三缕飘逸尾鳍 + 身后水痕 */
+  function drawRedFish(t) {
+    const a = u.ramp(0.2, 0.9, t);
+    if (a <= 0) return;
+    const [fx, fy] = fishPos(t);
+    const [vx, vy] = fishVel(t);
+    const speed = Math.hypot(vx, vy);
+    const ang = Math.atan2(vy, vx);
+    // 转弯侧倾:朝向变化率 → 身体侧滚
+    const [pvx, pvy] = fishVel(Math.max(0, t - 0.12));
+    const turn = (Math.atan2(vy, vx) - Math.atan2(pvy, pvx)) / 0.12;
+    const roll = Math.max(-0.35, Math.min(0.35, turn * 0.18));
+    // 冲程涌动:摆尾推进时身体沿泳向一冲一滑
+    const surge = Math.sin(strokePh) * Math.min(3, 0.8 + speed * 0.006);
+    const sx = fx + Math.cos(ang) * surge, sy = fy + Math.sin(ang) * surge;
+    // 尾摆幅度/频率随速度
+    const wagAmp = 4 + Math.min(6, speed * 0.014);
+    const wagPh = strokePh * 1.6;
+    // 水痕(尾迹渐隐)
+    push();
+    noFill();
+    strokeWeight(1.2);
+    for (let i = 1; i < fishTrail.length; i++) {
+      const [x0, y0] = fishTrail[i - 1], [x1, y1] = fishTrail[i];
+      stroke(RED[0], RED[1], RED[2], 26 * (i / fishTrail.length) * a);
+      line(x0, y0, x1, y1);
+    }
+    pop();
+
+    push();
+    translate(sx, sy);
+    rotate(ang + roll + Math.sin(t * 3.2) * 0.06);
+    drawingContext.globalAlpha = a;
+    // 尾鳍三缕(向后飘,摆动与冲程同步)
+    noFill();
+    stroke(RED[0], RED[1], RED[2], 190);
+    strokeWeight(2.2);
+    for (let j = -1; j <= 1; j++) {
+      const wig = Math.sin(wagPh + j * 1.8) * wagAmp;
+      bezier(-12, j * 3,
+             -24, j * 7 + wig,
+             -34, j * 11 + wig * 1.4,
+             -44, j * 13 + wig * 1.8);
+    }
+    // 身体(随冲程轻微伸缩)
+    const stretch = 1 + Math.sin(strokePh) * 0.05;
+    noStroke();
+    fill(RED[0], RED[1], RED[2], 235);
+    ellipse(0, 0, 30 * stretch, 15);
+    // 头与眼
+    fill(RED[0] - 20, RED[1] - 12, RED[2] - 8, 245);
+    ellipse(9, 0, 18, 13);
+    fill(20, 16, 12, 230);
+    circle(13, -2.5, 3.2);
+    // 背鳍
+    fill(RED[0], RED[1], RED[2], 160);
+    triangle(-6, -6, 4, -7, -2, -13 + Math.sin(t * 4) * 1.5);
+    drawingContext.globalAlpha = 1;
+    pop();
+  }
+
   function drawTitle(t) {
-    const a = u.ramp(0.5, 0.9, t);   // 标题与署名随开场一起出现(各场景通用格式)
+    const a = u.ramp(2.4, 3.2, t);
     if (a <= 0) return;
     push();
     textAlign(LEFT, BASELINE);
@@ -675,7 +469,7 @@
   /* 手动模式下的操作提示(自动/录制模式不显示) */
   function drawHint(t) {
     if (Engine.auto() || Engine.staticT !== null || !Engine.started) return;
-    const a = u.ramp(3.2, 4.2, t) * (1 - u.ramp(8.5, 9.5, t));
+    const a = u.ramp(3.2, 4.2, t) * (1 - u.ramp(9.5, 11, t));
     if (a <= 0) return;
     push();
     textAlign(CENTER, BASELINE);
@@ -683,41 +477,28 @@
     textStyle(NORMAL);
     textSize(13);
     fill(INK[0], INK[1], INK[2], 140 * a * (0.7 + 0.3 * Math.sin(t * 2)));
-    text("移 动 鼠 标 · 惊 起 一 纸 燕", W / 2, 940);
+    text("移 动 鼠 标 · 搅 动 一 池 水", W / 2, 940);
     pop();
   }
 
   function render(t) {
     image(paper, 0, 0);
-    drawLines(t);
-    drawPaperEdge(t);
+    drawRipples(t);
     drawChars(t);
-    drawInkBirds(t);
-    drawForeBirds(t);
-    drawRedCarp(t);
+    drawInkFish(t);
+    drawRedFish(t);
     drawTitle(t);
     drawHint(t);
-    // 开场整体淡入(稿纸居中出现)
-    const fade = 1 - u.ramp(0, 0.45, t);
-    if (fade > 0) {
-      push();
-      noStroke();
-      fill(BG[0], BG[1], BG[2], 255 * fade);
-      rect(0, 0, W, H);
-      pop();
-    }
   }
 
   /* ---------------- 注册场景 ---------------- */
   Engine.start({
     id: "yanfan",
-    width: W, height: H, duration: 10,
+    width: W, height: H, duration: 12,
     waypoints: WAYPOINTS,
     input: { attack: 5.0, release: 1.0 },
     preload() {
       fontWrite = loadFont("/assets/fonts/mashanzheng-sub.ttf");   // p5 loadFont 只认 ttf/otf
-      birdVec = loadJSON("/assets/birds.json");   // 燕子轮廓(与 typewriter 场景同款)
-      koiImg = loadImage("/assets/koi.png");      // 红鲤贴图
     },
     build() {
       buildPaper();       // 纸纹颗粒不参与固定种子,每次略有不同更自然
@@ -728,23 +509,26 @@
     render,
     audio: {
       intro() {
-        // 只用支持 schedule 的配方(stream/brush/pluck),现场与离线合成双端一致
-        return [
-          // 全程水流声 + 燕群巡游时加强
-          { t: 0.1, type: "stream", dur: 10, gain: 0.042 },
-          { t: 1.8, type: "stream", dur: 6.2, gain: 0.05 },
-          { t: 0.35, type: "brush", gain: 0.03, pitch: 0.9 },       // 一笔落纸
-          { t: 8.9, type: "pluck", freq: u.noteFreq(-5), gain: 0.03, decay: 1.4 },
-          { t: 9.35, type: "pluck", freq: u.noteFreq(2), gain: 0.028, decay: 1.4 },
-        ];
+        const ev = [];
+        // 全程水流声 + 鱼群巡游时加强
+        ev.push({ t: 0.1, type: "stream", dur: 12, gain: 0.045 });
+        ev.push({ t: 2.2, type: "stream", dur: 6.2, gain: 0.05 });
+        // 落笔声:每 5 字一记运笔,音高随笔势微变
+        for (let i = 0; i < chars.length; i += 5) {
+          ev.push({
+            t: chars[i].writeT + 0.05, type: "brush",
+            gain: 0.045, pitch: 0.9 + (i % 23) * 0.012,
+          });
+        }
+        return ev;
       },
     },
     ui: {
       tip: "点击开始播放",
-      sub: "燕返 · 字化成燕,燕归成书 · @GeekCatX",
+      sub: "燕返 · 字化成鱼,终归成书 · @GeekCatX",
       narration: [
-        { t: 0.9, text: "一纸手写信。红鲤游过,字迹化燕而去。" },
-        { t: 8.6, text: "燕群归来,字还是那些字。" },
+        { t: 1.0, text: "一封写在水上的信。红鲤游过,字都化成了鱼。" },
+        { t: 10.2, text: "鱼儿游回来,字还是那些字。" },
       ],
     },
   });
