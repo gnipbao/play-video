@@ -157,6 +157,7 @@
       for (let ci = 0; ci < line.length; ci++) {
         const ch = line[ci];
         const x = TEXT_X + indent + ci * CHAR_SIZE + CHAR_SIZE / 2;
+        const stream = Math.floor(random(3));   // 隶属哪股燕流
         chars.push({
           ch, x, y,
           rot: (random() - 0.5) * 0.06,
@@ -168,10 +169,11 @@
           breakT: 0, breakStrong: false,
           fx: 0, fy: 0, fvx: 0, fvy: 0,
           seed: random(1000),
-          stream: Math.floor(random(3)),        // 隶属哪股燕流
+          stream,
           ring: 60 + random(170),               // 环绕半径(散开,像燕群而非球)
-          ringA: random(Math.PI * 2),
-          ringW: (0.6 + random(0.9)) * (random() < 0.5 ? -1 : 1),
+          // 相位量化到 4 团、转向同流一致:成群成带地飞(椋鸟群结构)
+          ringA: Math.floor(random(4)) * (Math.PI / 2) + random(0.7),
+          ringW: (0.7 + random(0.5)) * [1, -1, 1][stream],
           scl: pickScale(random()),
           threshold: 0.4 + random(0.25),
         });
@@ -180,6 +182,7 @@
     wilds = [];
     for (let i = 0; i < 42; i++) {
       const fromLeft = random() < 0.6;
+      const stream = Math.floor(random(3));
       wilds.push({
         state: "out",
         enterT: 0.5 + random(1.1),
@@ -189,10 +192,10 @@
         ex: W + 40, ey: 200 + random(500),        // 离场点(右侧画外)
         fx: 0, fy: 0, fvx: 0, fvy: 0,
         seed: random(1000),
-        stream: Math.floor(random(3)),
+        stream,
         ring: 60 + random(170),
-        ringA: random(Math.PI * 2),
-        ringW: (0.6 + random(0.9)) * (random() < 0.5 ? -1 : 1),
+        ringA: Math.floor(random(4)) * (Math.PI / 2) + random(0.7),
+        ringW: (0.7 + random(0.5)) * [1, -1, 1][stream],
         scl: pickScale(random()),
         bvis: 0,
       });
@@ -293,15 +296,17 @@
     return [615 + 125 * Math.cos(-t * 0.42 + 0.7), 330 + 215 * Math.sin(-t * 0.42 + 0.7)];
   }
 
-  /* 燕群飞行:缀在本股流的涡心周围,环形轨道 + 呼吸半径 + 噪声游荡 */
+  /* 燕群飞行:同流同相位的燕团绕涡心滑行(团+带结构),噪声收小,
+     速度放开到 420 有穿梭感;鼠标搅动时燕群避让 */
   function flockFly(p, dt, t, input) {
     const c = p.stream === 0 ? birdPos(t) : streamCenter(p.stream, t);
     const ang = p.ringA + t * p.ringW;
-    const rr = p.ring * (0.7 + 0.3 * Math.sin(t * 0.7 + p.seed));
+    // 半径呼吸同流同相(整团一起胀缩,不散成晕)
+    const rr = p.ring * (0.75 + 0.25 * Math.sin(t * 0.7 + p.stream * 2.1));
     const gx = c[0] + Math.cos(ang) * rr;
     const gy = c[1] + Math.sin(ang) * rr * 0.78;
-    p.fvx += ((gx - p.fx) * 2.1 + (noise(p.seed, t * 1.1) - 0.5) * 760) * dt;
-    p.fvy += ((gy - p.fy) * 2.1 + (noise(p.seed + 40, t * 1.1) - 0.5) * 760) * dt;
+    p.fvx += ((gx - p.fx) * 2.6 + (noise(p.seed, t * 1.1) - 0.5) * 320) * dt;
+    p.fvy += ((gy - p.fy) * 2.6 + (noise(p.seed + 40, t * 1.1) - 0.5) * 320) * dt;
     if (input.active && input.D > 0.05) {   // 鼠标搅动:燕群避让
       const dm = Math.hypot(p.fx - input.x, p.fy - input.y);
       const g = u.gauss(dm, 90) * input.D;
@@ -309,7 +314,7 @@
       p.fvy += (p.fy - input.y) / (dm + 1e-3) * 900 * g * dt;
     }
     p.fvx *= (1 - 2.0 * dt); p.fvy *= (1 - 2.0 * dt);
-    capSpeed(p, 340);
+    capSpeed(p, 420);
     p.fx += p.fvx * dt; p.fy += p.fvy * dt;
     p.bvis = Math.min(1, p.bvis + dt * 5);
   }
