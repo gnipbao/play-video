@@ -10,7 +10,7 @@
  *   - 字迹 ⇄ 燕子:同一粒子,ink/break/bird 三态;化燕由
  *     红鲤临近 + 自上而下的时间波驱动,边缘不规则
  *   - 燕群:多股流(红鲤尾流 + 左右两个游移涡心),弧线/环形,
- *     不是随机噪点;造型对齐原片:一笔弯刀墨痕(新月形,极简)
+ *     不是随机噪点;造型对齐原片:一弯翼 + 中间小叉尾,两笔极简墨痕
  *   - 纸面液态位移:以红鲤为中心的位移场(径向推 + 切向旋),
  *     作用于横线/红线/纸边,鲤过回弹
  *
@@ -538,20 +538,23 @@
     pop();
   }
 
-  /* 墨燕造型(对齐原片):一笔弯刀墨痕——新月形笔触,两头尖、腹中饱满,
-     极简无细节;flap∈[-1,1] → 弧度如扇翅般呼吸。远近只是尺度差 */
+  /* 墨燕造型(对齐原片):两笔极简墨痕——一弯翼(弯刀新月,腹朝飞行方向鼓,
+     翼尖向后掠) + 中间一撮小叉尾;flap∈[-1,1] → 翼弯弧度如扇翅呼吸 */
   function drawSwallowShape(s, flap, col, alpha) {
-    const L = s * 1.7;                        // 半长
-    const C = s * (0.55 + 0.4 * flap);        // 弧度(呼吸)
-    const Wd = Math.max(0.8, s * 0.5);        // 腹厚
-    const belly = -C + Wd;
+    const L = s * 1.5;                        // 半翼展
+    const sw = s * 0.7;                       // 翼尖后掠
+    const C = s * (0.5 + 0.4 * flap);         // 翼腹前鼓(扇翅呼吸)
+    const Wd = Math.max(0.7, s * 0.45);       // 翼厚
     noStroke();
     fill(col[0], col[1], col[2], alpha);
     beginShape();
-    vertex(-L, 0);
-    quadraticVertex(0, -2 * C, L, 0);         // 背弧(过顶点 (0,-C))
-    quadraticVertex(0, 2 * belly, -L, 0);     // 腹弧
+    vertex(-sw, -L);
+    quadraticVertex(2 * C + sw, 0, -sw, L);             // 翼腹弧(朝前鼓)
+    quadraticVertex(2 * (C - Wd) + sw, 0, -sw, -L);     // 翼背弧
     endShape(CLOSE);
+    // 中间小叉尾(两短羽,指向身后)
+    triangle(-s * 0.05, -s * 0.07, -s * 1.35, -s * 0.3, -s * 1.2, 0);
+    triangle(-s * 0.05, s * 0.07, -s * 1.35, s * 0.3, -s * 1.2, 0);
   }
 
   function drawInkBirds(t) {
