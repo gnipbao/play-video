@@ -559,9 +559,9 @@
     pop();
   }
 
-  /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换;
-     只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);远处只是小墨点。
-     姿态对齐参考视频:朝向完全跟随运动方向(俯冲倒转不刻意正立、不翻转),
+  /* 墨燕(打字机同款形状):birds.json 的燕子轮廓点集,扑翼姿态随时间轮换
+     (两个翅膀挥动);只用单层俯冲姿态(bird1/bird3 一上一下双层翼,不用);
+     远处只是小墨点。身体随航向但镜像保持背朝上(不整体反转),
      过弯按转向率侧倾压弯(bank) */
   const POSES = [2, 4, 5];
   function drawBirdSprite(x, y, vx, vy, s, seed, t, alpha, roll) {
@@ -578,7 +578,8 @@
     const heading = Math.atan2(vy, vx);
     push();
     translate(x, y);
-    rotate(heading);                              // 机头完全跟随运动方向
+    rotate(heading);                              // 机头随航向
+    if (Math.cos(heading) < 0) scale(1, -1);      // 左飞镜像:背朝上,不整体反转
     const bank = Math.max(0.35, Math.cos(roll || 0));   // 过弯侧倾压弯
     scale(s * 0.075, s * 0.075 * bank);
     translate(-spec.w / 2, -spec.h / 2);
