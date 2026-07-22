@@ -152,6 +152,8 @@
     });
 
     birds = [];
+    flickT = 0.8;
+    for (const e of EXTRAS) e.fired = false;
   }
 
   /* 回车:两行打完各来一下(zip + ding) */
@@ -435,13 +437,7 @@
       buildPaper();     // 先铺水彩(不参与固定种子,颗粒每次不同)
       buildScene();     // 再定种子排剧本(random 调用顺序勿动)
     },
-    reset() {
-      for (const k of keyList) { k.flash = 0; k.used = 0; k.pop = 0; }
-      for (const p of presses) { p.fired = false; p.bird = null; p.rope = null; }
-      for (const e of EXTRAS) e.fired = false;
-      birds = [];
-      flickT = 0.8;
-    },
+    reset: buildScene,
     update: sceneUpdate,
     render,
     audio: {

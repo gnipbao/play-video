@@ -62,6 +62,7 @@
   function buildPuppet() {
     randomSeed(20240720);
     noiseSeed(23);
+    bones = [];
 
     // 悬挂平衡姿态(hip 为中心)
     pts = {

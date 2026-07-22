@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""离线合成配乐(与 web/engine/recipes.js 同一套配方)。
+"""离线合成配乐(与 engine/src/recipes.js 同一套配方)。
 
-用法: python3 tools/synth.py <events.json> <out.wav>
+用法: python3 engine/tools/synth.py <events.json> <out.wav>
 
 输入:?dump=1 渲染模式确定性导出的音轨事件 JSON
 输出:44.1kHz 立体声 16bit WAV
@@ -31,16 +31,66 @@ import numpy as np
 SR = 44100
 MASTER = 0.9
 
-events = json.load(open(sys.argv[1]))
+if len(sys.argv) < 3:
+    raise SystemExit("用法: engine/tools/synth.py <events.json> <out.wav> [duration]")
+
+with open(sys.argv[1], encoding="utf-8") as event_file:
+    events = json.load(event_file)
+if not isinstance(events, list):
+    raise ValueError("events.json 顶层必须是数组")
+
+# dump 事件通常已由 AudioBus 校验；这里仍做第二道防线，避免手工事件、旧缓存或
+# 自定义导出中的零增益/非有限参数让整条出片任务在数学运算中中断。
+clean_events = []
+positive_fields = ("freq", "gain", "pitch", "decay", "dur")
+required_freq = {"pluck", "takeoff", "land", "strum"}
+safe_ranges = {
+    "freq": (10.0, 24000.0),
+    "gain": (0.0005, 2.0),
+    "pitch": (0.05, 8.0),
+    "decay": (0.01, 30.0),
+    "dur": (0.01, 30.0),
+}
+for index, raw_event in enumerate(events):
+    if not isinstance(raw_event, dict) or not isinstance(raw_event.get("type"), str):
+        print(f"warn: 事件 #{index} 格式无效,已跳过", file=sys.stderr)
+        continue
+    try:
+        event = dict(raw_event)
+        event["t"] = float(event["t"])
+        if not math.isfinite(event["t"]) or event["t"] < 0:
+            raise ValueError
+        for field in positive_fields:
+            if field not in event:
+                continue
+            event[field] = float(event[field])
+            if not math.isfinite(event[field]) or event[field] <= 0:
+                raise ValueError
+            low, high = safe_ranges[field]
+            event[field] = max(low, min(high, event[field]))
+        if event["type"] in required_freq and "freq" not in event:
+            raise ValueError
+    except (KeyError, TypeError, ValueError, OverflowError):
+        print(f"warn: 事件 #{index} 含非法时间或音频参数,已跳过", file=sys.stderr)
+        continue
+    clean_events.append(event)
+events = clean_events
+
 out_path = sys.argv[2]
 
 tail = 3.0
-dur = max(e["t"] + e.get("dur", 0) for e in events) + tail
 # 可选第三参数:成片时长上限(视频长度),音轨不超长,结尾 0.3s 淡出
 maxdur = float(sys.argv[3]) if len(sys.argv) > 3 else None
+if maxdur is not None and (not math.isfinite(maxdur) or maxdur <= 0):
+    raise ValueError("duration 必须是大于 0 的有限数字")
+if events:
+    dur = max(float(e["t"]) + float(e.get("dur", 0)) for e in events) + tail
+else:
+    # 纯视觉场景也产出合法静音音轨;未给片长时默认 1 秒。
+    dur = maxdur if maxdur is not None else 1.0
 if maxdur is not None and dur > maxdur:
     dur = maxdur
-N = int(dur * SR)
+N = max(1, int(dur * SR))
 mix = np.zeros(N, dtype=np.float64)
 
 
@@ -339,7 +389,9 @@ if maxdur is not None:
     nf = min(N, int(0.3 * SR))
     mix[-nf:] *= np.linspace(1.0, 0.0, nf)
 mix = np.tanh(mix * 1.1) * MASTER
-mix *= 0.85 / np.max(np.abs(mix))
+peak = float(np.max(np.abs(mix)))
+if peak > 1e-12:
+    mix *= 0.85 / peak
 
 stereo = np.stack([mix, mix], axis=1)
 pcm = (stereo * 32767).astype(np.int16)

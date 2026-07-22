@@ -14,7 +14,7 @@
   }
   body { display: flex; align-items: center; justify-content: center; }
   #stage { position: relative; box-shadow: 0 12px 60px rgba(0,0,0,.55); }
-  #stage canvas { display: block; }
+  #stage canvas { display: block; touch-action: none; }
   #overlay {
     position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -35,7 +35,7 @@
     position: absolute; top: 10px; right: 12px; z-index: 20;
     display: flex; gap: 8px; opacity: 0; transition: opacity .3s;
   }
-  #stage:hover #controls { opacity: 1; }
+  #stage:hover #controls, #stage:focus-within #controls { opacity: 1; }
   #controls button {
     font-family: inherit; font-size: 11px; letter-spacing: 1px;
     background: rgba(234,228,211,.85); color: #17140f;
@@ -52,8 +52,14 @@
     border: 1px solid rgba(23,20,15,.5); border-radius: 3px;
     padding: 4px 9px; opacity: 0; transition: opacity .3s;
   }
-  #stage:hover #back { opacity: 1; }
+  #stage:hover #back, #stage:focus-within #back { opacity: 1; }
   #back:hover { background: #eae4d3; }
+  #controls button:focus-visible, #back:focus-visible {
+    outline: 2px solid #b03427; outline-offset: 2px;
+  }
+  @media (hover: none) {
+    #controls, #back { opacity: 1; }
+  }
 </style>
 </head>
 <body>

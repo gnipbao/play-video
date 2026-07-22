@@ -1,6 +1,6 @@
 /* ============================================================
  * 场景模板 — 复制本目录到 web/scenes/<你的场景名>/ 后改名实现
- * 要点(详见 ENGINE.md):
+ * 要点（详见 engine/DEVELOPMENT.md）：
  *   1. 种子里的事:build() 内先 randomSeed/noiseSeed,之后 random()
  *      的调用顺序就是画面,改动即变样
  *   2. 所有"受惊/归位"表现读 input.D / input.x / input.y
@@ -101,8 +101,12 @@
   Engine.start({
     id: "my-scene",            // TODO: 与 record.html 的 data-composition-id 一致
     width: W, height: H, duration: 10,   // TODO: 片长(秒)
+    pixelDensity: "auto",       // 现场跟随设备(最高 2),录制仍可显式锁定数值
     waypoints: WAYPOINTS,
+    timing: { fixedStep: 1 / 60, recordStep: 1 / 60 },
+    performance: { adaptive: true, targetFps: 50 },
     build,
+    reset: build,
     update: sceneUpdate,
     render,
     audio: {

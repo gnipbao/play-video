@@ -1,0 +1,23 @@
+{
+  "name": "@play-video/creative-runtime",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Processing-style p5.js creative interaction and deterministic rendering runtime",
+  "scripts": {
+    "test": "node --test test/engine.test.cjs"
+  },
+  "files": [
+    "src",
+    "tools",
+    "README.md",
+    "API.md",
+    "DEVELOPMENT.md"
+  ],
+  "keywords": [
+    "p5.js",
+    "creative-coding",
+    "generative-art",
+    "interactive-art",
+    "deterministic-rendering"
+  ]
+}

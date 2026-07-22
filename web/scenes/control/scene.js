@@ -97,6 +97,9 @@
   function buildScene() {
     randomSeed(20240717);
     noiseSeed(7);
+    simNow = 0;
+    prevMx = null; prevMy = null;
+    lastStrumT = 0; wasActive = false;
     SCORE = genScore();               // 在种子确定后生成,保证可复现
     notes = [];
     let k = 0;
@@ -611,11 +614,7 @@
       buildPaper();     // 先铺纸纹(不参与固定种子,颗粒每次不同)
       buildScene();     // 再定种子生成曲谱(random 调用顺序勿动)
     },
-    reset() {
-      for (const n of notes) {
-        n.state = "note"; n.vis = 0; n.calmT = 0; n.repopT = -1;
-      }
-    },
+    reset: buildScene,
     update: sceneUpdate,
     render,
     audio: {

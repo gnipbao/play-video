@@ -57,12 +57,12 @@ tools/serve.py 8123
 tools/make_film.sh record.html demo/control.mp4
 ```
 
-脚本自动完成四步(细节见 ENGINE.md):
+脚本自动完成四步（细节见 [engine/DEVELOPMENT.md](../engine/DEVELOPMENT.md)）：
 
 1. **渲染无声视频**:`record.html` 是 hyperframes 合成页,与主页面同一套场景,
    走确定性 seek 驱动(引擎 `window.__hfSeek` + paused GSAP 时间线)
 2. **导出音轨事件**:headless Chrome 打开 `record.html?dump=1`,快进全片抓取 `__AUDIO__`
-3. **离线合成配乐**:`tools/synth.py`(与 `engine/recipes.js` 同一套配方)
+3. **离线合成配乐**：`engine/tools/synth.py`（与 `engine/src/recipes.js` 同一套配方）
 4. **混音成片**:ffmpeg 合成 `demo/control.mp4`
 
 渲染模式下音轨事件(入场拨弦/惊飞/归位/划谱)与现场播放同一套触发逻辑,
@@ -76,8 +76,9 @@ tools/make_film.sh record.html demo/control.mp4
 
 ## 素材与实现要点
 
-- 代码结构:`engine/`(渲染契约/输入/音轨总线,通用)+ `scenes/control/scene.js`(本场景逻辑);
-  引擎接口见根目录 ENGINE.md,新场景从 `templates/scene/` 复制起步
+- 代码结构：顶层 `engine/` 是独立运行时包；`web/engine` 只是静态挂载；
+  `scenes/control/scene.js` 是本展示场景逻辑。引擎接口见
+  [engine/API.md](../engine/API.md)，新场景从 `templates/scene/` 复制起步
 - `assets/hand.png` — 从原片帧提取的提线手剪影
 - `assets/birds.json` — 从原片帧提取并矢量化的 5 种燕子(轮廓 + RDP 简化),缩放不模糊
 - `lib/p5.min.js` — p5.js 1.11.13(与心法视频同版本),本地化离线可用

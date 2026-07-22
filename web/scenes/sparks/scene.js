@@ -140,6 +140,7 @@
     width: W, height: H, duration: 10,
     waypoints: WAYPOINTS,
     build,
+    reset: build,
     update: sceneUpdate,
     render,
     audio: {

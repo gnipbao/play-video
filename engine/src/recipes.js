@@ -15,8 +15,8 @@
  *   swish   拨水:短噪声带通慢扫(摆尾推进)
  *   shimmer 持续噪声微光,增益随扰动起伏
  *
- * Engine.recipes:事件 type → 现场播法。离线合成(tools/synth.py)
- * 用同名同参配方——新增音效必须两处对齐(见 ENGINE.md)。
+ * Engine.recipes:事件 type → 现场播法。离线合成(engine/tools/synth.py)
+ * 用同名同参配方——新增音效必须两处对齐(见 engine/DEVELOPMENT.md)。
  *   schedule:开场旋律等定点播放;playNow:交互触发的即时播放
  *   minInterval:同类事件最小间隔(限流,防密集触发)
  * ============================================================ */
@@ -26,16 +26,41 @@ Engine.LiveAudio = class {
   constructor() {
     this.ctx = null;
     this.master = null;
+    this.compressor = null;
     this.shimmerGain = null;
+    this.shimmerSource = null;
+    this.shimmerFilter = null;
     this.enabled = true;
-    this._nodes = [];
+    this._nodes = new Map();
+    this._noiseCache = new Map();
+    this._noiseSamples = 0;
+    this._maxNoiseSeconds = 60;
+    this._lastShimmer = 0;
+    this._lastShimmerAt = -1;
+    this._stateChange = Promise.resolve();
   }
 
   /* 必须在用户手势后调用 */
   init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === "suspended") this.resume();
+      return this.ctx;
+    }
     const AC = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new AC();
+    if (!AC) {
+      this.enabled = false;
+      console.warn("当前浏览器不支持 Web Audio,场景将以静音运行");
+      return null;
+    }
+    try {
+      this.ctx = new AC();
+    } catch (error) {
+      this.enabled = false;
+      this.ctx = null;
+      Engine.emit("audio:error", { reason: "context-create", error });
+      console.warn("无法创建 AudioContext,场景将以静音运行", error);
+      return null;
+    }
 
     this.master = this.ctx.createGain();
     this.master.gain.value = this.enabled ? 0.9 : 0;
@@ -44,8 +69,10 @@ Engine.LiveAudio = class {
     comp.ratio.value = 6;
     this.master.connect(comp);
     comp.connect(this.ctx.destination);
+    this.compressor = comp;
 
     this._shimmer();
+    return this.ctx;
   }
 
   setEnabled(on) {
@@ -57,16 +84,60 @@ Engine.LiveAudio = class {
 
   /* 停掉所有已调度/在响的节点(重播时用);短音效 stop 未触发节点会报错,吞掉 */
   stopAll() {
-    for (const n of this._nodes) { try { n.stop(); } catch (e) { /* 已停过的忽略 */ } }
-    this._nodes = [];
+    for (const [source, chain] of [...this._nodes]) {
+      try { source.onended = null; source.stop(); } catch (e) { /* 已停过的忽略 */ }
+      for (const node of chain) {
+        try { node.disconnect(); } catch (e) { /* 已断开的忽略 */ }
+      }
+    }
+    this._nodes.clear();
+    if (this.shimmerGain && this.ctx) {
+      this.shimmerGain.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.shimmerGain.gain.setValueAtTime(0, this.ctx.currentTime);
+    }
+    this._lastShimmer = 0;
+    this._lastShimmerAt = -1;
   }
 
   _noiseBuffer(dur) {
-    const n = Math.floor(this.ctx.sampleRate * dur);
+    const bucket = dur <= 0.5
+      ? Math.ceil(dur * 100) / 100
+      : Math.ceil(Math.min(dur, 30) * 10) / 10;
+    const key = bucket.toFixed(2);
+    if (this._noiseCache.has(key)) {
+      const cached = this._noiseCache.get(key);
+      // LRU:读取后移到末尾。
+      this._noiseCache.delete(key);
+      this._noiseCache.set(key, cached);
+      return cached.buffer;
+    }
+    const n = Math.max(1, Math.floor(this.ctx.sampleRate * bucket));
     const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    const budget = this.ctx.sampleRate * this._maxNoiseSeconds;
+    while (this._noiseCache.size && this._noiseSamples + n > budget) {
+      const oldestKey = this._noiseCache.keys().next().value;
+      const oldest = this._noiseCache.get(oldestKey);
+      this._noiseSamples -= oldest.samples;
+      this._noiseCache.delete(oldestKey);
+    }
+    this._noiseCache.set(key, { buffer: buf, samples: n });
+    this._noiseSamples += n;
     return buf;
+  }
+
+  _track(source, ...voiceNodes) {
+    if (!source) return source;
+    const chain = [source, ...voiceNodes];
+    this._nodes.set(source, chain);
+    source.onended = () => {
+      this._nodes.delete(source);
+      for (const node of chain) {
+        try { node.disconnect(); } catch (e) { /* 已断开的忽略 */ }
+      }
+    };
+    return source;
   }
 
   /* 噪声微光:扰动时的"空气感" */
@@ -82,10 +153,60 @@ Engine.LiveAudio = class {
     src.connect(bp); bp.connect(g); g.connect(this.master);
     src.start();
     this.shimmerGain = g;
+    this.shimmerSource = src;
+    this.shimmerFilter = bp;
   }
 
   setShimmer(v) {
-    if (this.shimmerGain) this.shimmerGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.12);
+    if (!this.shimmerGain || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const numeric = Number(v);
+    const value = Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 0;
+    if (now - this._lastShimmerAt < 1 / 30) return;
+    if (Math.abs(value - this._lastShimmer) < 0.001) return;
+    this.shimmerGain.gain.cancelScheduledValues(now);
+    this.shimmerGain.gain.setTargetAtTime(value, now, 0.12);
+    this._lastShimmer = value;
+    this._lastShimmerAt = now;
+  }
+
+  suspend() {
+    return this._transition("suspended");
+  }
+
+  resume() {
+    return this._transition("running");
+  }
+
+  _transition(target) {
+    const ctx = this.ctx;
+    if (!ctx) return Promise.resolve();
+    this._stateChange = this._stateChange.then(() => {
+      if (this.ctx !== ctx || ctx.state === "closed") return;
+      if (target === "suspended" && ctx.state === "running") return ctx.suspend();
+      if (target === "running" && ctx.state === "suspended") return ctx.resume();
+    }).catch((error) => {
+      Engine.emit("audio:error", { reason: `context-${target}`, error });
+    });
+    return this._stateChange;
+  }
+
+  destroy() {
+    this.stopAll();
+    if (this.shimmerSource) {
+      try { this.shimmerSource.stop(); } catch (e) { /* 已停止 */ }
+      try { this.shimmerSource.disconnect(); } catch (e) { /* 已断开 */ }
+    }
+    if (this.shimmerFilter) { try { this.shimmerFilter.disconnect(); } catch (e) { /* 已断开 */ } }
+    if (this.shimmerGain) { try { this.shimmerGain.disconnect(); } catch (e) { /* 已断开 */ } }
+    if (this.master) { try { this.master.disconnect(); } catch (e) { /* 已断开 */ } }
+    if (this.compressor) { try { this.compressor.disconnect(); } catch (e) { /* 已断开 */ } }
+    this._noiseCache.clear();
+    this._noiseSamples = 0;
+    const closing = this.ctx && this.ctx.state !== "closed" ? this.ctx.close().catch(() => {}) : Promise.resolve();
+    this.ctx = null; this.master = null; this.compressor = null;
+    this.shimmerSource = null; this.shimmerFilter = null; this.shimmerGain = null;
+    return closing;
   }
 
   /* 拨弦:三角波快攻慢衰 + 起音噪声;gliss=true 时音高急速下滑 */
@@ -113,7 +234,7 @@ Engine.LiveAudio = class {
     hp.type = "highpass"; hp.frequency.value = 1500;
     nb.connect(ng); ng.connect(hp); hp.connect(this.master);
     nb.start(t);
-    this._nodes.push(o, nb);
+    this._track(o, g, lp); this._track(nb, ng, hp);
   }
 
   /* 风声 whoosh:白噪声 + 带通扫频 */
@@ -133,7 +254,7 @@ Engine.LiveAudio = class {
     g.gain.linearRampToValueAtTime(0, t + dur);
     src.connect(bp); bp.connect(g); g.connect(this.master);
     src.start(t);
-    this._nodes.push(src);
+    this._track(src, bp, g);
   }
 
   /* 打字机击键:金属 tick + 木腔 clack + 字锤 thump;pitch 逐键微抖 */
@@ -170,7 +291,7 @@ Engine.LiveAudio = class {
     og.gain.exponentialRampToValueAtTime(0.0004, t + 0.06);
     o.connect(og); og.connect(this.master);
     o.start(t); o.stop(t + 0.07);
-    this._nodes.push(nb, cb, o);
+    this._track(nb, hp, g1); this._track(cb, bp, g2); this._track(o, og);
   }
 
   /* 运笔 brush:带通噪声柔和下扫(2500→700Hz),毛笔落纸的摩擦感 */
@@ -189,7 +310,7 @@ Engine.LiveAudio = class {
     g.gain.linearRampToValueAtTime(0, t + 0.13);
     src.connect(bp); bp.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + 0.15);
-    this._nodes.push(src);
+    this._track(src, bp, g);
   }
 
   /* 扑翼 flutter:一串短噪声脉冲(~10Hz 三次),鸟群扇翅 */
@@ -208,7 +329,7 @@ Engine.LiveAudio = class {
       g.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.05);
       nb.connect(bp); bp.connect(g); g.connect(this.master);
       nb.start(t0); nb.stop(t0 + 0.06);
-      this._nodes.push(nb);
+      this._track(nb, bp, g);
     }
   }
 
@@ -231,7 +352,7 @@ Engine.LiveAudio = class {
       g.gain.exponentialRampToValueAtTime(0.0004, t0 + d + 0.03);
       o.connect(g); g.connect(this.master);
       o.start(t0); o.stop(t0 + d + 0.05);
-      this._nodes.push(o);
+      this._track(o, g);
     }
   }
 
@@ -252,7 +373,7 @@ Engine.LiveAudio = class {
     g.gain.linearRampToValueAtTime(0, t + 0.25);
     src.connect(bp); bp.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + 0.27);
-    this._nodes.push(src);
+    this._track(src, bp, g);
   }
 
   /* 燕鸣与拨水之上的水泡 blip:正弦快速上滑(气泡升水) */
@@ -269,7 +390,7 @@ Engine.LiveAudio = class {
     g.gain.exponentialRampToValueAtTime(0.0004, t + 0.09);
     o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + 0.1);
-    this._nodes.push(o);
+    this._track(o, g);
   }
 
   /* 水流 stream:持续噪声过低通 + 缓慢增益起伏(汩汩声),dur 秒长 */
@@ -293,7 +414,7 @@ Engine.LiveAudio = class {
     g.gain.linearRampToValueAtTime(0, t + dur);
     src.connect(lp); lp.connect(bp); bp.connect(g); g.connect(this.master);
     src.start(t); src.stop(t + dur + 0.1);
-    this._nodes.push(src);
+    this._track(src, lp, bp, g);
   }
 
   /* 木关节 knock:短噪声过木质腔体带通 + 低频 thump(木偶关节/足尖触地) */
@@ -319,7 +440,7 @@ Engine.LiveAudio = class {
     og.gain.exponentialRampToValueAtTime(0.0004, t + 0.07);
     o.connect(og); og.connect(this.master);
     o.start(t); o.stop(t + 0.08);
-    this._nodes.push(cb, o);
+    this._track(cb, bp, g2); this._track(o, og);
   }
 
   /* 回车:擦键 zip(噪声上扫) + 铃 ding(C7 + 非谐泛音) */
@@ -353,12 +474,12 @@ Engine.LiveAudio = class {
     og2.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.5);
     o2.connect(og2); og2.connect(this.master);
     o2.start(t0); o2.stop(t0 + 0.6);
-    this._nodes.push(src, o, o2);
+    this._track(src, bp, g); this._track(o, og); this._track(o2, og2);
   }
 };
 
-/* ---------------- 音效配方(与 tools/synth.py 同名对齐) ---------------- */
-Engine.recipes = {
+/* ---------------- 音效配方(与 engine/tools/synth.py 同名对齐) ---------------- */
+Engine.recipes = Object.assign(Object.create(null), {
   pluck: {
     schedule(a, when, ev) {
       a.pluck(when, ev.freq,
@@ -465,4 +586,23 @@ Engine.recipes = {
         ev.pitch === undefined ? 1 : ev.pitch);
     },
   },
+});
+
+/* 自定义音效扩展点。建议同时为离线合成器提供同名实现。 */
+Engine.registerRecipe = function (name, recipe) {
+  if (typeof name !== "string" || !name.trim()) {
+    throw new TypeError("Engine.registerRecipe(name, recipe) 需要非空名称");
+  }
+  const key = name.trim();
+  if (!recipe || typeof recipe !== "object") {
+    throw new TypeError(`音效配方 ${key} 必须是对象`);
+  }
+  if (typeof recipe.playNow !== "function" && typeof recipe.schedule !== "function") {
+    throw new TypeError(`音效配方 ${key} 至少需要 playNow 或 schedule`);
+  }
+  Engine.recipes[key] = Object.assign({}, recipe);
+  Engine.emit("audio:recipe", { name: key, recipe: Engine.recipes[key] });
+  return Engine.recipes[key];
 };
+
+Engine.getRecipe = function (name) { return Engine.recipes[name] || null; };

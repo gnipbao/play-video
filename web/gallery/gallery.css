@@ -58,22 +58,23 @@ h1 .en { color: var(--red); }
 .card { display: flex; flex-direction: column; }
 
 .card .frame {
-  position: relative; display: block; overflow: hidden;
+  position: relative; display: block; overflow: hidden; width: 100%; padding: 0;
   border: 1px solid var(--line);
   background: #dfd8c4;
   box-shadow: 0 6px 24px rgba(26, 23, 18, .12);
   transition: transform .35s ease, box-shadow .35s ease;
   cursor: pointer;
 }
-.card .frame:hover {
+.card .frame:hover, .card .frame:focus-visible {
   transform: translateY(-5px);
   box-shadow: 0 16px 42px rgba(26, 23, 18, .2);
 }
+.card .frame:focus-visible { outline: 3px solid var(--red); outline-offset: 3px; }
 .card .frame video {
   display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
   transition: transform .5s ease;
 }
-.card .frame:hover video { transform: scale(1.025); }
+.card .frame:hover video, .card .frame:focus-visible video { transform: scale(1.025); }
 
 /* 播放角标 */
 .card .frame::after {
@@ -84,7 +85,7 @@ h1 .en { color: var(--red); }
   padding: 4px 8px; border-radius: 3px;
   opacity: 0; transition: opacity .3s;
 }
-.card .frame:hover::after { opacity: 1; }
+.card .frame:hover::after, .card .frame:focus-visible::after { opacity: 1; }
 
 .card h2 { margin-top: 16px; font-size: 17px; letter-spacing: 1px; }
 .card h2 .sub { font-size: 12px; color: var(--ink-soft); font-weight: 400; margin-left: 8px; }
@@ -127,6 +128,7 @@ footer .red { color: var(--red); font-weight: 700; }
   color: #eae4d3; font-size: 26px; cursor: pointer; user-select: none;
   font-family: inherit; background: none; border: none;
 }
+#lightbox .close:focus-visible { outline: 2px solid #eae4d3; outline-offset: 4px; }
 #lightbox .cap {
   position: absolute; bottom: 22px; left: 0; right: 0;
   text-align: center; color: rgba(234, 228, 211, .65);
@@ -137,4 +139,9 @@ footer .red { color: var(--red); font-weight: 700; }
 @media (max-width: 640px) {
   header { padding: 48px 0 30px; }
   .grid { gap: 26px; padding-top: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .card .frame, .card .frame video { transition: none; }
 }
