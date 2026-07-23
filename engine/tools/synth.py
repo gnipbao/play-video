@@ -14,6 +14,7 @@
   type    — 打字机击键:金属 tick + 腔体 clack + 低频 thump(pitch 微抖)
   carriage — 打字机回车:擦键 zip + 铃 ding
   knock   — 木关节碰撞:短噪声过木质腔体带通 + 低频 thump(pitch 微抖)
+  crack   — 纸面裂开:连续撕裂刮擦 + 细小高频碎屑
   brush   — 运笔:带通噪声柔和下扫(书写)
   flutter — 扑翼:一串短噪声脉冲(鸟群扇翅)
   blip    — 水泡:正弦快速上滑(鱼/气泡)
@@ -323,6 +324,47 @@ def add_knock(t0, gain, pitch=1.0):
         mix[i0:i0 + n] += np.sin(phase) * env * gain * 0.7
 
 
+def add_crack(t0, gain, pitch=1.0):
+    """对应 LiveAudio.crack():高频脆响 + 持续纸面刮擦 + 四颗轻微碎屑。"""
+    i0 = int(t0 * SR)
+    if i0 >= N:
+        return
+    # snap:45ms 高频脆响
+    n = min(int(0.045 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 79)
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / (gain * 0.82)) * t / 0.042)
+        mix[i0:i0 + n] += _bandpass(
+            rng.uniform(-1, 1, n), 4100 * pitch, 0.72
+        ) * env * gain * 0.82 * 3.0
+    # tear:235ms 中高频刮擦
+    n = min(int(0.235 * SR), N - i0)
+    if n > 0:
+        rng = np.random.default_rng(int(t0 * 1000) + 83)
+        t = np.arange(n) / SR
+        attack = np.minimum(t / 0.018, 1.0)
+        decay = np.exp(np.log(0.0004 / gain) * t / 0.235)
+        mix[i0:i0 + n] += _bandpass(
+            rng.uniform(-1, 1, n), 1750 * pitch, 0.58
+        ) * attack * decay * gain * 3.0
+    # debris:四颗轻微碎屑
+    for i, ratio in enumerate([1.21, 0.88, 1.34, 1.03]):
+        j0 = int((t0 + 0.052 + i * 0.041) * SR)
+        if j0 >= N:
+            continue
+        n = min(int(0.023 * SR), N - j0)
+        if n <= 0:
+            continue
+        chip_gain = gain * (0.24 - i * 0.028)
+        rng = np.random.default_rng(int(t0 * 1000) + 97 + i)
+        t = np.arange(n) / SR
+        env = np.exp(np.log(0.0004 / chip_gain) * t / 0.023)
+        mix[j0:j0 + n] += _bandpass(
+            rng.uniform(-1, 1, n), 2600 * pitch * ratio, 1.8
+        ) * env * chip_gain * 3.0
+
+
 def add_carriage(t0, gain):
     """对应 LiveAudio.carriage():擦键 zip(0.18s 上扫)+ 铃 ding(C7 2093Hz + 2.76 倍非谐泛音)。"""
     i0 = int(t0 * SR)
@@ -365,6 +407,8 @@ for e in events:
         add_carriage(e["t"], e.get("gain", 0.06))
     elif ty == "knock":
         add_knock(e["t"], e.get("gain", 0.10), e.get("pitch", 1.0))
+    elif ty == "crack":
+        add_crack(e["t"], e.get("gain", 0.07), e.get("pitch", 1.0))
     elif ty == "brush":
         add_brush(e["t"], e.get("gain", 0.05), e.get("pitch", 1.0))
     elif ty == "flutter":

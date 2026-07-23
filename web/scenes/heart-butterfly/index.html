@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#171b1a">
+<title>Heart &amp; Butterflies — 交互版</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 42%, #313735 0, #202523 42%, #151817 100%);
+    font-family: "Courier New", Courier, monospace;
+  }
+  body { display: grid; place-items: center; }
+  #stage {
+    position: relative;
+    overflow: hidden;
+    background: #eef2f1;
+    box-shadow:
+      0 32px 90px rgba(0, 0, 0, .46),
+      0 0 0 1px rgba(255, 255, 255, .05);
+  }
+  #stage canvas {
+    display: block;
+    touch-action: none;
+    cursor: crosshair;
+  }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: grid;
+    place-items: center;
+    color: #141918;
+    background:
+      linear-gradient(rgba(238, 242, 241, .9), rgba(238, 242, 241, .96)),
+      repeating-linear-gradient(0deg, transparent 0 5px, rgba(16, 20, 19, .025) 5px 6px);
+    cursor: pointer;
+    user-select: none;
+    transition: opacity .55s ease, visibility .55s ease;
+  }
+  #overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  .enter {
+    width: min(76%, 420px);
+    text-align: center;
+  }
+  .specimen {
+    position: relative;
+    width: 86px;
+    height: 86px;
+    margin: 0 auto 26px;
+    border: 1px solid rgba(20, 25, 24, .75);
+    border-radius: 50%;
+  }
+  .specimen::before,
+  .specimen::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: #141918;
+    transform: translate(-50%, -50%) rotate(45deg);
+  }
+  .specimen::before { width: 30px; height: 1px; }
+  .specimen::after { width: 1px; height: 30px; }
+  .tip {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+  .sub {
+    margin-top: 10px;
+    color: #68716f;
+    font-size: 11px;
+    line-height: 1.7;
+    letter-spacing: .08em;
+  }
+  #back,
+  #controls {
+    position: absolute;
+    z-index: 20;
+    top: 12px;
+    opacity: 0;
+    transition: opacity .25s ease;
+  }
+  #back { left: 12px; }
+  #controls { right: 12px; display: flex; gap: 7px; }
+  #stage:hover #back,
+  #stage:hover #controls,
+  #stage:focus-within #back,
+  #stage:focus-within #controls { opacity: 1; }
+  #back,
+  #controls button {
+    border: 1px solid rgba(17, 21, 19, .45);
+    border-radius: 2px;
+    padding: 5px 9px;
+    color: #151918;
+    background: rgba(238, 242, 241, .82);
+    font: 700 10px/1.2 "Courier New", Courier, monospace;
+    letter-spacing: .08em;
+    text-decoration: none;
+    backdrop-filter: blur(5px);
+  }
+  #controls button { cursor: pointer; }
+  #controls button:hover,
+  #back:hover { color: #eef2f1; background: #151918; }
+  #controls button.on { color: #eef2f1; background: #151918; }
+  #controls button:focus-visible,
+  #back:focus-visible {
+    outline: 2px solid #0b42e8;
+    outline-offset: 2px;
+  }
+  @media (hover: none) {
+    #back, #controls { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #overlay { transition-duration: .01ms; }
+  }
+</style>
+</head>
+<body>
+  <div id="stage" class="clip" data-start="0" data-duration="15.25" data-track-index="0">
+    <audio id="reference-track" src="./heart-butterfly-reference.m4a" preload="auto"></audio>
+    <div id="overlay">
+      <div class="enter">
+        <div class="specimen" aria-hidden="true"></div>
+        <div class="tip">Enter the heart</div>
+        <div class="sub">移动牵引蝶群 · 点击触发脉冲<br>交互式视觉习作 · after @Livo</div>
+      </div>
+    </div>
+    <a id="back" href="/" aria-label="返回画廊">← 画廊</a>
+    <div id="controls">
+      <button id="btn-replay" type="button" title="重新播放">↻ 重播</button>
+      <button id="btn-sound" type="button" class="on" title="配乐/音效">音效 开</button>
+      <button id="btn-voice" type="button" title="中文旁白">旁白 关</button>
+    </div>
+  </div>
+  <script src="../../lib/p5.min.js"></script>
+  <script src="../../engine/core.js"></script>
+  <script src="../../engine/input.js"></script>
+  <script src="../../engine/systems.js"></script>
+  <script src="../../engine/recipes.js"></script>
+  <script src="../../engine/audio-bus.js"></script>
+  <script src="scene.js"></script>
+</body>
+</html>

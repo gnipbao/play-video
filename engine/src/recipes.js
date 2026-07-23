@@ -7,6 +7,7 @@
  *   type    打字机击键:金属 tick + 腔体 clack + 低频 thump(pitch 逐键微抖)
  *   carriage 打字机回车:擦键 zip + 铃 ding
  *   knock   木关节碰撞:短噪声过木质腔体带通 + 低频 thump(pitch 微抖)
+ *   crack   纸面裂开:连续撕裂刮擦 + 细小高频碎屑
  *   brush   运笔:带通噪声柔和下扫(书写)
  *   flutter 扑翼:一串短噪声脉冲(鸟群扇翅)
  *   blip    水泡:正弦快速上滑(鱼/气泡)
@@ -443,6 +444,62 @@ Engine.LiveAudio = class {
     this._track(cb, bp, g2); this._track(o, og);
   }
 
+  /* 纸面 crack:持续刮擦/撕裂颗粒 + 细小脆响；不使用沉重低频冲击 */
+  crack(t, gain = 0.07, pitch = 1) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+
+    // snap:细薄纸面突然断开的高频脆响
+    const snap = ctx.createBufferSource();
+    snap.buffer = this._noiseBuffer(0.045);
+    const snapBand = ctx.createBiquadFilter();
+    snapBand.type = "bandpass";
+    snapBand.frequency.value = 4100 * pitch;
+    snapBand.Q.value = 0.72;
+    const snapGain = ctx.createGain();
+    snapGain.gain.setValueAtTime(gain * 0.82, t);
+    snapGain.gain.exponentialRampToValueAtTime(0.0004, t + 0.042);
+    snap.connect(snapBand); snapBand.connect(snapGain); snapGain.connect(this.master);
+    snap.start(t); snap.stop(t + 0.05);
+
+    // tear:较长、较宽的中高频刮擦，连续事件相互重叠后接近原片纹理。
+    const tear = ctx.createBufferSource();
+    tear.buffer = this._noiseBuffer(0.25);
+    const tearBand = ctx.createBiquadFilter();
+    tearBand.type = "bandpass";
+    tearBand.frequency.value = 1750 * pitch;
+    tearBand.Q.value = 0.58;
+    const tearHigh = ctx.createBiquadFilter();
+    tearHigh.type = "highpass";
+    tearHigh.frequency.value = 520;
+    const tearGain = ctx.createGain();
+    tearGain.gain.setValueAtTime(0.0004, t);
+    tearGain.gain.linearRampToValueAtTime(gain, t + 0.018);
+    tearGain.gain.exponentialRampToValueAtTime(0.0004, t + 0.235);
+    tear.connect(tearHigh); tearHigh.connect(tearBand); tearBand.connect(tearGain); tearGain.connect(this.master);
+    tear.start(t); tear.stop(t + 0.26);
+
+    // debris:四个轻微纸屑脆响，参数固定以保持可复现。
+    const debrisPitch = [1.21, 0.88, 1.34, 1.03];
+    for (let i = 0; i < debrisPitch.length; i++) {
+      const t0 = t + 0.052 + i * 0.041;
+      const chip = ctx.createBufferSource();
+      chip.buffer = this._noiseBuffer(0.025);
+      const chipBand = ctx.createBiquadFilter();
+      chipBand.type = "bandpass";
+      chipBand.frequency.value = 2600 * pitch * debrisPitch[i];
+      chipBand.Q.value = 1.8;
+      const chipGain = ctx.createGain();
+      chipGain.gain.setValueAtTime(gain * (0.24 - i * 0.028), t0);
+      chipGain.gain.exponentialRampToValueAtTime(0.0004, t0 + 0.023);
+      chip.connect(chipBand); chipBand.connect(chipGain); chipGain.connect(this.master);
+      chip.start(t0); chip.stop(t0 + 0.03);
+      this._track(chip, chipBand, chipGain);
+    }
+    this._track(snap, snapBand, snapGain);
+    this._track(tear, tearHigh, tearBand, tearGain);
+  }
+
   /* 回车:擦键 zip(噪声上扫) + 铃 ding(C7 + 非谐泛音) */
   carriage(t, gain = 0.06) {
     if (!this.ctx) return;
@@ -529,6 +586,19 @@ Engine.recipes = Object.assign(Object.create(null), {
         ev.pitch === undefined ? 1 : ev.pitch);
     },
   },
+  crack: {
+    minInterval: 0.11,
+    schedule(a, when, ev) {
+      a.crack(when,
+        ev.gain === undefined ? 0.07 : ev.gain,
+        ev.pitch === undefined ? 1 : ev.pitch);
+    },
+    playNow(a, ev) {
+      a.crack(a.ctx.currentTime,
+        ev.gain === undefined ? 0.07 : ev.gain,
+        ev.pitch === undefined ? 1 : ev.pitch);
+    },
+  },
   brush: {
     minInterval: 0.04,   // 限流:连续书写时不至于糊成一片
     schedule(a, when, ev) {
@@ -544,6 +614,11 @@ Engine.recipes = Object.assign(Object.create(null), {
   },
   flutter: {
     minInterval: 0.09,   // 限流:群体扑翼不至于糊成一片
+    schedule(a, when, ev) {
+      a.flutter(when,
+        ev.gain === undefined ? 0.04 : ev.gain,
+        ev.pitch === undefined ? 1 : ev.pitch);
+    },
     playNow(a, ev) {
       a.flutter(a.ctx.currentTime,
         ev.gain === undefined ? 0.04 : ev.gain,
