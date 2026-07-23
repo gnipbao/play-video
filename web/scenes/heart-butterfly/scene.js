@@ -870,7 +870,7 @@
 
     textSize(12);
     fill(BLUE[0], BLUE[1], BLUE[2], alpha * 0.9);
-    text("after @Livo", 482, 236);
+    text("@GeekCatX", 482, 236);
     pop();
   }
 
@@ -1007,7 +1007,7 @@
     },
     ui: {
       tip: "ENTER THE HEART",
-      sub: "移动牵引蝶群 · 点击触发脉冲 · after @Livo",
+      sub: "移动牵引蝶群 · 点击触发脉冲 · @GeekCatX",
       canvasLabel: "心脏与蝴蝶交互画布；移动指针牵引，点击触发群蝶爆发",
     },
   });
