@@ -19,8 +19,8 @@ tools/test_engine.sh
 浏览器访问：
 
 - 作品集：`http://localhost:8123/`
-- 交互场景：`/scenes/yanfan/`、`/scenes/puppet/`、`/scenes/typewriter/`、
-  `/scenes/control/`、`/scenes/sparks/`
+- 交互场景：`/scenes/heart-butterfly/`、`/scenes/yanfan/`、`/scenes/puppet/`、
+  `/scenes/typewriter/`、`/scenes/control/`、`/scenes/sparks/`
 - 自动演示与调试：在场景 URL 后添加 `?auto=1&debug=1`
 
 新建场景：

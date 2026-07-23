@@ -7,6 +7,16 @@
 
 window.WORKS = [
   {
+    id: "heart-butterfly",
+    title: "Heart & Butterflies",
+    subtitle: "裂心与蝴蝶",
+    desc: "墙面沿裂纹剥落成一枚黑色心脏。黄色蝴蝶逐只飞出，先坠落的红线在重力与牵引之间慢慢张开。",
+    film: "films/heart-butterfly.mp4",
+    play: "scenes/heart-butterfly/",
+    duration: "0:15",
+    year: "2026.07",
+  },
+  {
     id: "yanfan",
     title: "Yanfan",
     subtitle: "燕返",
